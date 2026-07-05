@@ -22,7 +22,3 @@ export function createMemoryDestination(queue: string): DestinationConnector {
     },
   };
 }
-
-export function peekMemoryQueue(queue: string): Message[] {
-  return queues.get(queue) ?? [];
-}

@@ -1,7 +1,7 @@
 const state = {
   flows: [],
+  templates: [],
   selectedFlowId: null,
-  lastRoutingCondition: null,
 };
 
 async function api(method, path, body) {
@@ -32,26 +32,67 @@ function parseJsonField(value, fieldLabel, { optional = false } = {}) {
   }
 }
 
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 // ---------- Tabs ----------
 document.querySelectorAll(".tab-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-    document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
-  });
+  btn.addEventListener("click", () => activateTab(btn.dataset.tab));
 });
+
+function activateTab(tab) {
+  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
+  if (tab === "monitoring") loadMonitoring();
+}
 
 // ---------- Health ----------
 async function refreshHealth() {
   const badge = document.getElementById("ollamaStatus");
+  const scheduleBadge = document.getElementById("scheduleStatus");
   try {
     const health = await api("GET", "/health");
     badge.textContent = health.ollamaReachable ? "Ollama 연결됨" : "Ollama 꺼짐 (로컬 AI 비활성)";
     badge.className = "badge " + (health.ollamaReachable ? "badge-ok" : "badge-down");
+    scheduleBadge.textContent = `활성 스케줄 ${health.activeSchedules}개`;
+    scheduleBadge.className = "badge badge-unknown";
   } catch {
     badge.textContent = "상태 확인 실패";
     badge.className = "badge badge-down";
+  }
+}
+
+// ---------- Templates ----------
+async function loadTemplates() {
+  const container = document.getElementById("templateList");
+  state.templates = await api("GET", "/api/templates");
+  container.innerHTML = "";
+  for (const t of state.templates) {
+    const card = document.createElement("div");
+    card.className = "template-card";
+    card.innerHTML = `
+      <span class="category">${escapeHtml(t.category)}</span>
+      <h3>${escapeHtml(t.name)}</h3>
+      <p>${escapeHtml(t.scenario)}</p>
+      <div class="notes">${escapeHtml(t.notes)}</div>
+    `;
+    const btn = document.createElement("button");
+    btn.textContent = "이 템플릿으로 Flow 만들기";
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        await api("POST", `/api/templates/${t.id}/instantiate`, {});
+        await loadFlows();
+        activateTab("flows");
+      } catch (err) {
+        alert(`Flow 생성 실패: ${err.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+    card.appendChild(btn);
+    container.appendChild(card);
   }
 }
 
@@ -64,7 +105,7 @@ function webhookUrlFor(flow) {
 function renderFlowList() {
   const container = document.getElementById("flowList");
   if (state.flows.length === 0) {
-    container.innerHTML = '<p class="hint">등록된 Flow가 없습니다.</p>';
+    container.innerHTML = '<p class="hint">등록된 Flow가 없습니다. 템플릿 탭에서 만들어보세요.</p>';
     return;
   }
   container.innerHTML = "";
@@ -77,7 +118,7 @@ function renderFlowList() {
         <strong>${escapeHtml(flow.name)}</strong>
         <div class="meta">
           ${flow.source.type} → ${flow.destination.type}
-          ${flow.routing ? '<span class="tag">routing</span>' : ""}
+          ${flow.schedule ? `<span class="tag">schedule: ${escapeHtml(flow.schedule)}</span>` : ""}
           ${flow.mapping && flow.mapping.length ? '<span class="tag">mapping</span>' : ""}
         </div>
         ${webhookUrl ? `<div class="meta">webhook: <span class="webhook-url">${webhookUrl}</span></div>` : ""}
@@ -134,8 +175,20 @@ async function loadFlows() {
   renderFlowList();
 }
 
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function runRowsHtml(runs) {
+  if (runs.length === 0) return '<tr><td colspan="6" class="hint">실행 이력 없음</td></tr>';
+  return runs
+    .map(
+      (r) => `<tr>
+        <td>${new Date(r.timestamp).toLocaleString()}</td>
+        <td>${r.durationMs}ms</td>
+        <td>${r.received}</td>
+        <td>${r.success}</td>
+        <td>${r.failed}</td>
+        <td>${r.errors && r.errors.length ? `<span class="error">${escapeHtml(r.errors.join("; "))}</span>` : "-"}</td>
+      </tr>`,
+    )
+    .join("");
 }
 
 async function showFlowDetail(flowId, latestRunResult) {
@@ -147,34 +200,7 @@ async function showFlowDetail(flowId, latestRunResult) {
   detail.hidden = false;
   title.textContent = `Flow 상세: ${flow.name}`;
 
-  const [history, anomalies] = await Promise.all([
-    api("GET", `/api/metrics/${flowId}`),
-    api("GET", `/api/metrics/${flowId}/anomalies?explain=true`),
-  ]);
-
-  const rows = history
-    .slice(-10)
-    .reverse()
-    .map(
-      (m) => `<tr>
-        <td>${new Date(m.timestamp).toLocaleString()}</td>
-        <td>${m.durationMs}ms</td>
-        <td>${m.received}</td>
-        <td>${m.success}</td>
-        <td>${m.failed}</td>
-        <td>${m.filtered ?? 0}</td>
-      </tr>`,
-    )
-    .join("");
-
-  const anomalyHtml = anomalies.length
-    ? anomalies
-        .map(
-          (a) => `<div class="error">⚠ [${a.metric}] ${a.explanation ?? `평균 ${a.mean.toFixed(2)} 대비 ${a.latestValue.toFixed(2)}`}</div>`,
-        )
-        .join("")
-    : '<p class="hint">최근 이상 없음</p>';
-
+  const runs = await api("GET", `/api/monitoring/runs?flowId=${flowId}&limit=10`);
   const webhookUrl = webhookUrlFor(flow);
 
   body.innerHTML = `
@@ -187,11 +213,9 @@ async function showFlowDetail(flowId, latestRunResult) {
     ${latestRunResult ? `<h3>방금 실행 결과</h3><pre class="result">${escapeHtml(JSON.stringify(latestRunResult, null, 2))}</pre>` : ""}
     <h3>최근 실행 이력</h3>
     <table>
-      <thead><tr><th>시각</th><th>소요</th><th>수신</th><th>성공</th><th>실패</th><th>필터링</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="6" class="hint">실행 이력 없음</td></tr>'}</tbody>
+      <thead><tr><th>시각</th><th>소요</th><th>수신</th><th>성공</th><th>실패</th><th>에러</th></tr></thead>
+      <tbody>${runRowsHtml(runs.slice().reverse())}</tbody>
     </table>
-    <h3>이상탐지</h3>
-    ${anomalyHtml}
   `;
 }
 
@@ -201,12 +225,13 @@ document.getElementById("flowForm").addEventListener("submit", async (e) => {
   errorBox.textContent = "";
   const form = new FormData(e.target);
   try {
+    const schedule = form.get("schedule").trim();
     const payload = {
       name: form.get("name").trim(),
       source: parseJsonField(form.get("source"), "소스 커넥터"),
       destination: parseJsonField(form.get("destination"), "목적지 커넥터"),
       mapping: parseJsonField(form.get("mapping"), "매핑 규칙", { optional: true }),
-      routing: parseJsonField(form.get("routing"), "라우팅 규칙", { optional: true }),
+      schedule: schedule || undefined,
     };
     await api("POST", "/api/flows", payload);
     e.target.reset();
@@ -216,87 +241,84 @@ document.getElementById("flowForm").addEventListener("submit", async (e) => {
   }
 });
 
-// ---------- AI Mapping ----------
-document.getElementById("mappingGenerateBtn").addEventListener("click", async () => {
-  const errorBox = document.getElementById("mappingError");
-  const resultBox = document.getElementById("mappingResult");
-  errorBox.textContent = "";
-  resultBox.hidden = true;
+// ---------- Monitoring ----------
+async function loadMonitoring() {
+  const container = document.getElementById("monitoringTable");
+  container.innerHTML = '<p class="hint">불러오는 중…</p>';
   try {
-    const sourceSample = parseJsonField(document.getElementById("mappingSource").value, "소스 샘플");
-    const targetSample = parseJsonField(document.getElementById("mappingTarget").value, "타겟 샘플");
-    const { mapping } = await api("POST", "/api/mapping/generate", { sourceSample, targetSample });
-    resultBox.textContent = JSON.stringify(mapping, null, 2);
-    resultBox.hidden = false;
-  } catch (err) {
-    errorBox.textContent = err.message;
-  }
-});
-
-// ---------- Routing ----------
-document.getElementById("routingGenerateBtn").addEventListener("click", async () => {
-  const errorBox = document.getElementById("routingError");
-  const resultBox = document.getElementById("routingResult");
-  errorBox.textContent = "";
-  resultBox.hidden = true;
-  document.getElementById("routingPreviewBtn").disabled = true;
-  try {
-    const sample = parseJsonField(document.getElementById("routingSample").value, "샘플 페이로드");
-    const description = document.getElementById("routingDescription").value.trim();
-    if (!description) throw new Error("자연어 조건을 입력하세요.");
-    const { routing } = await api("POST", "/api/routing/generate", { sample, description });
-    state.lastRoutingCondition = routing;
-    resultBox.textContent = JSON.stringify(routing, null, 2);
-    resultBox.hidden = false;
-    document.getElementById("routingPreviewBtn").disabled = false;
-  } catch (err) {
-    errorBox.textContent = err.message;
-  }
-});
-
-document.getElementById("routingPreviewBtn").addEventListener("click", async () => {
-  const previewBox = document.getElementById("routingPreviewResult");
-  previewBox.textContent = "";
-  try {
-    const sample = parseJsonField(document.getElementById("routingSample").value, "샘플 페이로드");
-    const { matches } = await api("POST", "/api/routing/preview", { sample, routing: state.lastRoutingCondition });
-    previewBox.innerHTML = matches
-      ? '<span class="tag" style="color:var(--success);border-color:var(--success)">✓ 이 샘플은 통과합니다</span>'
-      : '<span class="tag tag-anomaly">✗ 이 샘플은 필터링(차단)됩니다</span>';
-  } catch (err) {
-    previewBox.innerHTML = `<span class="error">${err.message}</span>`;
-  }
-});
-
-// ---------- Anomalies ----------
-async function loadAnomalies() {
-  const list = document.getElementById("anomaliesList");
-  list.textContent = "불러오는 중…";
-  try {
-    const [flows, anomalyGroups] = await Promise.all([api("GET", "/api/flows"), api("GET", "/api/anomalies")]);
-    const nameOf = (id) => flows.find((f) => f.id === id)?.name ?? id;
-    if (anomalyGroups.length === 0) {
-      list.innerHTML = '<p class="hint">현재 이상 탐지된 Flow가 없습니다.</p>';
+    const runs = await api("GET", "/api/monitoring/runs?limit=50");
+    if (runs.length === 0) {
+      container.innerHTML = '<p class="hint">실행 이력이 없습니다.</p>';
       return;
     }
-    list.innerHTML = anomalyGroups
+    const rows = runs
       .map(
-        (group) => `
-      <div class="card">
-        <strong>${escapeHtml(nameOf(group.flowId))}</strong>
-        ${group.anomalies
-          .map((a) => `<div class="error">⚠ [${a.metric}] 평균 ${a.mean.toFixed(2)} → 현재 ${a.latestValue.toFixed(2)} (z=${a.zScore === Infinity ? "∞" : a.zScore.toFixed(2)})</div>`)
-          .join("")}
-      </div>`,
+        (r) => `<tr>
+          <td>${new Date(r.timestamp).toLocaleString()}</td>
+          <td>${escapeHtml(r.flowName)}</td>
+          <td>${r.durationMs}ms</td>
+          <td>${r.received}</td>
+          <td>${r.failed > 0 ? `<span class="tag tag-fail">실패 ${r.failed}</span>` : '<span class="tag tag-ok">성공</span>'}</td>
+          <td>${r.errors && r.errors.length ? `<span class="error">${escapeHtml(r.errors.join("; "))}</span>` : "-"}</td>
+        </tr>`,
       )
       .join("");
+    container.innerHTML = `
+      <table>
+        <thead><tr><th>시각</th><th>Flow</th><th>소요</th><th>수신</th><th>결과</th><th>에러</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
   } catch (err) {
-    list.innerHTML = `<p class="error">${err.message}</p>`;
+    container.innerHTML = `<p class="error">${err.message}</p>`;
   }
 }
-document.getElementById("anomaliesRefreshBtn").addEventListener("click", loadAnomalies);
+document.getElementById("monitoringRefreshBtn").addEventListener("click", loadMonitoring);
+
+// ---------- Chat ----------
+function appendChatMessage(role, text, note) {
+  const log = document.getElementById("chatLog");
+  const el = document.createElement("div");
+  el.className = `chat-msg ${role}`;
+  el.textContent = text;
+  if (note) {
+    const noteEl = document.createElement("span");
+    noteEl.className = "fallback-note";
+    noteEl.textContent = note;
+    el.appendChild(noteEl);
+  }
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendChat() {
+  const input = document.getElementById("chatInput");
+  const question = input.value.trim();
+  if (!question) return;
+  input.value = "";
+  appendChatMessage("user", question);
+  const sendBtn = document.getElementById("chatSendBtn");
+  sendBtn.disabled = true;
+  try {
+    const result = await api("POST", "/api/chat", { question });
+    appendChatMessage(
+      "bot",
+      result.answer,
+      result.aiUsed ? `(${result.range.label} 데이터 기준, AI 응답)` : `(${result.range.label} 데이터 기준, Ollama 없음 → 통계 요약)`,
+    );
+  } catch (err) {
+    appendChatMessage("bot", `오류: ${err.message}`);
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+document.getElementById("chatSendBtn").addEventListener("click", sendChat);
+document.getElementById("chatInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") sendChat();
+});
 
 // ---------- Init ----------
 refreshHealth();
+loadTemplates();
 loadFlows();
 setInterval(refreshHealth, 15000);

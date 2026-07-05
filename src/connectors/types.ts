@@ -1,4 +1,4 @@
-import type { ConnectorConfig, Message } from "../core/types.js";
+import type { Message } from "../core/types.js";
 
 export interface SourceConnector {
   receive(): Promise<Message[]>;
@@ -7,6 +7,3 @@ export interface SourceConnector {
 export interface DestinationConnector {
   send(message: Message): Promise<void>;
 }
-
-export type CreateSource = (config: ConnectorConfig) => SourceConnector;
-export type CreateDestination = (config: ConnectorConfig) => DestinationConnector;

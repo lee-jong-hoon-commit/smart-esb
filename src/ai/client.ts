@@ -9,7 +9,7 @@ export async function pingOllama(): Promise<boolean> {
   }
 }
 
-export async function askForJson(prompt: string): Promise<unknown> {
+export async function askText(prompt: string): Promise<string> {
   let res: Response;
   try {
     res = await fetch(`${config.ollamaHost}/api/chat`, {
@@ -18,7 +18,6 @@ export async function askForJson(prompt: string): Promise<unknown> {
       body: JSON.stringify({
         model: config.ollamaModel,
         stream: false,
-        format: "json",
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -29,11 +28,13 @@ export async function askForJson(prompt: string): Promise<unknown> {
       })`,
     );
   }
-  if (!res.ok) {
-    throw new Error(`Ollama 호출 실패: ${res.status} ${res.statusText}`);
-  }
+  if (!res.ok) throw new Error(`Ollama 호출 실패: ${res.status} ${res.statusText}`);
   const data = (await res.json()) as { message?: { content?: string } };
-  const text = data.message?.content ?? "";
+  return data.message?.content ?? "";
+}
+
+export async function askForJson(prompt: string): Promise<unknown> {
+  const text = await askText(prompt);
   const jsonMatch = text.match(/```json\s*([\s\S]*?)```/) ?? text.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
   const jsonText = jsonMatch ? jsonMatch[1] : text;
   return JSON.parse(jsonText);
