@@ -102,12 +102,28 @@ button.secondary {
 }
 
 .error { color: var(--danger); font-size: 0.85rem; margin-top: 8px; white-space: pre-wrap; }
+.error-text { color: var(--danger); }
 
 .row-between { display: flex; justify-content: space-between; align-items: center; }
 
 table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 8px; }
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 th { color: var(--muted); font-weight: 500; }
+
+.table-scroll { overflow-x: auto; }
+
+.mon-table {
+  table-layout: fixed;
+  min-width: 920px;
+}
+.mon-table th, .mon-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.mon-table .cell-ellipsis { max-width: 0; }
+.mon-table .col-count, .mon-table .col-duration { text-align: right; }
 
 .tag {
   display: inline-block;

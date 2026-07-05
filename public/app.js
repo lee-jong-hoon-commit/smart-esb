@@ -51,29 +51,36 @@ async function loadMonitoring() {
       return;
     }
     const rows = result.rows
-      .map(
-        (r) => `<tr data-transaction-id="${escapeHtml(r.transactionId)}">
-          <td class="mono">${escapeHtml(r.transactionId)}</td>
-          <td>${escapeHtml(r.interfaceName)}<div class="hint">${escapeHtml(r.interfaceId)}</div></td>
-          <td>${new Date(r.startedAt).toLocaleString()}</td>
-          <td>${new Date(r.endedAt).toLocaleString()}</td>
-          <td>${r.recordCount}</td>
-          <td>${resultTag(r.result)}</td>
-          <td>${r.errorDetail ? `<span class="error">${escapeHtml(r.errorDetail)}</span>` : "-"}</td>
-          <td>${r.durationMs}ms</td>
-        </tr>`,
-      )
+      .map((r) => {
+        const interfaceLabel = `${r.interfaceName} (${r.interfaceId})`;
+        return `<tr data-transaction-id="${escapeHtml(r.transactionId)}">
+          <td class="mono cell-ellipsis" title="${escapeHtml(r.transactionId)}">${escapeHtml(r.transactionId)}</td>
+          <td class="cell-ellipsis" title="${escapeHtml(interfaceLabel)}">${escapeHtml(interfaceLabel)}</td>
+          <td class="cell-ellipsis">${new Date(r.startedAt).toLocaleString()}</td>
+          <td class="cell-ellipsis">${new Date(r.endedAt).toLocaleString()}</td>
+          <td class="col-count">${r.recordCount}</td>
+          <td class="col-result">${resultTag(r.result)}</td>
+          <td class="cell-ellipsis" title="${r.errorDetail ? escapeHtml(r.errorDetail) : ""}">${r.errorDetail ? `<span class="error-text">${escapeHtml(r.errorDetail)}</span>` : "-"}</td>
+          <td class="col-duration">${r.durationMs}ms</td>
+        </tr>`;
+      })
       .join("");
     container.innerHTML = `
-      <table>
-        <thead>
-          <tr>
-            <th>트랜잭션ID</th><th>인터페이스명(ID)</th><th>시작시간</th><th>종료시간</th>
-            <th>건수</th><th>결과</th><th>에러내용</th><th>소요시간</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
+      <div class="table-scroll">
+        <table class="mon-table">
+          <colgroup>
+            <col style="width: 16%" /><col style="width: 18%" /><col style="width: 12%" /><col style="width: 12%" />
+            <col style="width: 6%" /><col style="width: 8%" /><col style="width: 20%" /><col style="width: 8%" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>트랜잭션ID</th><th>인터페이스명(ID)</th><th>시작시간</th><th>종료시간</th>
+              <th>건수</th><th>결과</th><th>에러내용</th><th>소요시간</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
     `;
     container.querySelectorAll("tbody tr").forEach((tr) => {
       tr.addEventListener("click", () => showRunDetail(tr.dataset.transactionId));
