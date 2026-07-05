@@ -5,6 +5,7 @@ export interface FlowRunMetric {
   received: number;
   success: number;
   failed: number;
+  filtered?: number;
 }
 
 export interface Anomaly {

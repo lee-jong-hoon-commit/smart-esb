@@ -1,46 +1,43 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import { config } from "../config.js";
+import { db } from "../db/index.js";
 import type { FlowRunMetric } from "./types.js";
 
-const MAX_HISTORY_PER_FLOW = 500;
-const metricsFile = path.join(config.dataDir, "metrics.json");
-
-let store: Record<string, FlowRunMetric[]> = {};
-let loaded = false;
-
-async function ensureLoaded(): Promise<void> {
-  if (loaded) return;
-  try {
-    const raw = await fs.readFile(metricsFile, "utf-8");
-    store = JSON.parse(raw);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-    store = {};
-  }
-  loaded = true;
+interface FlowRunRow {
+  flow_id: string;
+  timestamp: string;
+  duration_ms: number;
+  received: number;
+  success: number;
+  failed: number;
+  filtered: number;
 }
 
-async function persist(): Promise<void> {
-  await fs.mkdir(config.dataDir, { recursive: true });
-  await fs.writeFile(metricsFile, JSON.stringify(store, null, 2), "utf-8");
+function rowToMetric(row: FlowRunRow): FlowRunMetric {
+  return {
+    flowId: row.flow_id,
+    timestamp: row.timestamp,
+    durationMs: row.duration_ms,
+    received: row.received,
+    success: row.success,
+    failed: row.failed,
+    filtered: row.filtered,
+  };
 }
 
 export async function recordRun(metric: FlowRunMetric): Promise<void> {
-  await ensureLoaded();
-  const history = store[metric.flowId] ?? [];
-  history.push(metric);
-  if (history.length > MAX_HISTORY_PER_FLOW) history.shift();
-  store[metric.flowId] = history;
-  await persist();
+  db.prepare(
+    `INSERT INTO flow_runs (flow_id, timestamp, duration_ms, received, success, failed, filtered)
+     VALUES (@flowId, @timestamp, @durationMs, @received, @success, @failed, @filtered)`,
+  ).run({ filtered: 0, ...metric });
 }
 
-export async function getHistory(flowId: string): Promise<FlowRunMetric[]> {
-  await ensureLoaded();
-  return store[flowId] ?? [];
+export async function getHistory(flowId: string, limit = 500): Promise<FlowRunMetric[]> {
+  const rows = db
+    .prepare("SELECT * FROM flow_runs WHERE flow_id = ? ORDER BY id DESC LIMIT ?")
+    .all(flowId, limit) as FlowRunRow[];
+  return rows.map(rowToMetric).reverse();
 }
 
 export async function getAllFlowIds(): Promise<string[]> {
-  await ensureLoaded();
-  return Object.keys(store);
+  const rows = db.prepare("SELECT DISTINCT flow_id FROM flow_runs").all() as { flow_id: string }[];
+  return rows.map((r) => r.flow_id);
 }
