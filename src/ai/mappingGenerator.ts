@@ -1,6 +1,6 @@
 import { MappingRuleSchema, type MappingRule } from "../core/types.js";
 import { BUILTIN_TRANSFORMS } from "../transform/mapper.js";
-import { askForJson, isAiEnabled } from "./client.js";
+import { askForJson } from "./client.js";
 
 const TRANSFORM_NAMES = Object.keys(BUILTIN_TRANSFORMS).join(", ");
 
@@ -23,9 +23,6 @@ ${JSON.stringify(targetSample, null, 2)}
 }
 
 export async function generateMapping(sourceSample: unknown, targetSample: unknown): Promise<MappingRule[]> {
-  if (!isAiEnabled()) {
-    throw new Error("AI 매핑 생성은 ANTHROPIC_API_KEY가 필요합니다.");
-  }
   const raw = await askForJson(buildPrompt(sourceSample, targetSample));
   const rules = Array.isArray(raw) ? raw : [raw];
   return rules.map((rule) => MappingRuleSchema.parse(rule));
