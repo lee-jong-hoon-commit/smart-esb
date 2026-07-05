@@ -1,0 +1,11 @@
+{
+  "orderId": "ORD-1001",
+  "customer": {
+    "name": "hong gil dong",
+    "email": "hong@example.com"
+  },
+  "items": [
+    { "sku": "A100", "qty": 2, "price": 15000 }
+  ],
+  "createdAt": "2026-07-01T09:30:00Z"
+}
