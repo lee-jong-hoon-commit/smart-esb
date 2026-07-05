@@ -11,6 +11,11 @@
     <h1>smart-esb</h1>
   </header>
 
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="monitoring">모니터링</button>
+    <button class="tab-btn" data-tab="chat">챗봇</button>
+  </nav>
+
   <main>
     <section id="tab-monitoring" class="tab-panel active">
       <div class="card">
@@ -20,6 +25,21 @@
         </div>
         <p class="hint">전체 Flow의 최근 실행 이력입니다. 실패한 실행은 에러 메시지가 함께 표시됩니다.</p>
         <div id="monitoringTable"></div>
+      </div>
+    </section>
+
+    <section id="tab-chat" class="tab-panel">
+      <div class="card">
+        <h2>연계 현황 챗봇</h2>
+        <p class="hint">
+          예: "금일 연계 에러 현황 정리해줘", "어제 실패한 연계 있어?", "최근 1시간 상황 알려줘".
+          AI 없이 실행 로그를 집계한 평문 요약으로 답합니다.
+        </p>
+        <div id="chatLog" class="chat-log"></div>
+        <div class="chat-input-row">
+          <input type="text" id="chatInput" placeholder="질문을 입력하세요" />
+          <button id="chatSendBtn">전송</button>
+        </div>
       </div>
     </section>
   </main>

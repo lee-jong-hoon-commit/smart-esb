@@ -17,6 +17,17 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// ---------- Tabs ----------
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => activateTab(btn.dataset.tab));
+});
+
+function activateTab(tab) {
+  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
+}
+
+// ---------- Monitoring ----------
 async function loadMonitoring() {
   const container = document.getElementById("monitoringTable");
   container.innerHTML = '<p class="hint">불러오는 중…</p>';
@@ -50,4 +61,43 @@ async function loadMonitoring() {
 }
 document.getElementById("monitoringRefreshBtn").addEventListener("click", loadMonitoring);
 
+// ---------- Chat ----------
+function appendChatMessage(role, text, note) {
+  const log = document.getElementById("chatLog");
+  const el = document.createElement("div");
+  el.className = `chat-msg ${role}`;
+  el.textContent = text;
+  if (note) {
+    const noteEl = document.createElement("span");
+    noteEl.className = "fallback-note";
+    noteEl.textContent = note;
+    el.appendChild(noteEl);
+  }
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendChat() {
+  const input = document.getElementById("chatInput");
+  const question = input.value.trim();
+  if (!question) return;
+  input.value = "";
+  appendChatMessage("user", question);
+  const sendBtn = document.getElementById("chatSendBtn");
+  sendBtn.disabled = true;
+  try {
+    const result = await api("POST", "/api/chat", { question });
+    appendChatMessage("bot", result.answer, `(${result.range.label} 데이터 기준)`);
+  } catch (err) {
+    appendChatMessage("bot", `오류: ${err.message}`);
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+document.getElementById("chatSendBtn").addEventListener("click", sendChat);
+document.getElementById("chatInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") sendChat();
+});
+
+// ---------- Init ----------
 loadMonitoring();
