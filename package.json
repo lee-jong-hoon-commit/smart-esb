@@ -1,7 +1,7 @@
 {
   "name": "smart-esb",
   "version": "0.1.0",
-  "description": "한국 기업환경 연계(ESB) 템플릿 + 모니터링 대시보드 + 챗봇",
+  "description": "연계(ESB) 실행 로그 모니터링 대시보드",
   "type": "module",
   "private": true,
   "scripts": {
@@ -15,9 +15,7 @@
     "better-sqlite3": "^12.11.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.21.1",
-    "node-cron": "^4.6.0",
-    "zod": "^3.23.8"
+    "express": "^4.21.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

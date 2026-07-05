@@ -1,8 +1,5 @@
 node_modules/
 dist/
 .env
-data/*
-!data/samples/
-data/samples/*
-!data/samples/*.json
+data/
 *.log

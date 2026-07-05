@@ -9,77 +9,10 @@
 <body>
   <header class="topbar">
     <h1>smart-esb</h1>
-    <span id="ollamaStatus" class="badge badge-unknown">Ollama 확인 중…</span>
-    <span id="scheduleStatus" class="badge badge-unknown"></span>
   </header>
 
-  <nav class="tabs">
-    <button class="tab-btn active" data-tab="templates">템플릿</button>
-    <button class="tab-btn" data-tab="flows">Flows</button>
-    <button class="tab-btn" data-tab="monitoring">모니터링</button>
-    <button class="tab-btn" data-tab="chat">챗봇</button>
-  </nav>
-
   <main>
-    <!-- Templates -->
-    <section id="tab-templates" class="tab-panel active">
-      <div class="card">
-        <h2>연계 패턴 템플릿</h2>
-        <p class="hint">한국 기업환경에서 자주 쓰는 연계 시나리오입니다. 버튼 하나로 바로 실행 가능한 Flow를 만듭니다.</p>
-        <div id="templateList" class="template-grid"></div>
-      </div>
-    </section>
-
-    <!-- Flows -->
-    <section id="tab-flows" class="tab-panel">
-      <div class="grid-2">
-        <div class="card">
-          <h2>새 Flow 직접 만들기</h2>
-          <form id="flowForm">
-            <label>이름
-              <input type="text" name="name" placeholder="order-sync" required />
-            </label>
-
-            <fieldset>
-              <legend>소스 커넥터 (JSON)</legend>
-              <textarea name="source" rows="3" required>{ "type": "memory", "queue": "my-queue" }</textarea>
-              <p class="hint">file: {"type":"file","path":"./data/in.json"} · memory: {"type":"memory","queue":"이름"}(웹훅 실시간) · http: {"type":"http","url":"https://...","method":"POST"} · db: {"type":"db","table":"orders","watermarkColumn":"id","filter":{"column":"status","equals":"NEW"}}</p>
-            </fieldset>
-
-            <fieldset>
-              <legend>목적지 커넥터 (JSON)</legend>
-              <textarea name="destination" rows="3" required>{ "type": "file", "path": "./data/out/result.jsonl" }</textarea>
-            </fieldset>
-
-            <fieldset>
-              <legend>매핑 규칙 (JSON 배열, 선택)</legend>
-              <textarea name="mapping" rows="4" placeholder='[{"from":"user.name","to":"buyerName","transform":"uppercase"}]'></textarea>
-            </fieldset>
-
-            <fieldset>
-              <legend>스케줄 (cron, 선택)</legend>
-              <input type="text" name="schedule" placeholder="0 1 * * * (매일 01:00). 비우면 수동/웹훅 실행만" />
-            </fieldset>
-
-            <button type="submit">Flow 생성</button>
-          </form>
-          <div id="flowFormError" class="error"></div>
-        </div>
-
-        <div class="card">
-          <h2>Flow 목록</h2>
-          <div id="flowList" class="flow-list"></div>
-        </div>
-      </div>
-
-      <div class="card" id="flowDetail" hidden>
-        <h2 id="flowDetailTitle">Flow 상세</h2>
-        <div id="flowDetailBody"></div>
-      </div>
-    </section>
-
-    <!-- Monitoring -->
-    <section id="tab-monitoring" class="tab-panel">
+    <section id="tab-monitoring" class="tab-panel active">
       <div class="card">
         <div class="row-between">
           <h2>실행 로그 모니터링</h2>
@@ -87,19 +20,6 @@
         </div>
         <p class="hint">전체 Flow의 최근 실행 이력입니다. 실패한 실행은 에러 메시지가 함께 표시됩니다.</p>
         <div id="monitoringTable"></div>
-      </div>
-    </section>
-
-    <!-- Chatbot -->
-    <section id="tab-chat" class="tab-panel">
-      <div class="card">
-        <h2>연계 현황 챗봇</h2>
-        <p class="hint">예: "금일 연계 에러 현황 정리해줘", "어제 실패한 연계 있어?", "최근 1시간 상황 알려줘"</p>
-        <div id="chatLog" class="chat-log"></div>
-        <div class="chat-input-row">
-          <input type="text" id="chatInput" placeholder="질문을 입력하세요" />
-          <button id="chatSendBtn">전송</button>
-        </div>
       </div>
     </section>
   </main>
