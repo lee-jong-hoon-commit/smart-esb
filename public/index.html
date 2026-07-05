@@ -23,8 +23,17 @@
           <h2>실행 로그 모니터링</h2>
           <button id="monitoringRefreshBtn">새로고침</button>
         </div>
-        <p class="hint">전체 Flow의 최근 실행 이력입니다. 실패한 실행은 에러 메시지가 함께 표시됩니다.</p>
+        <p class="hint">전체 인터페이스의 트랜잭션 이력입니다. 행을 클릭하면 상세 데이터를 볼 수 있습니다.</p>
         <div id="monitoringTable"></div>
+        <div id="monitoringPager" class="pager"></div>
+      </div>
+
+      <div class="card" id="runDetail" hidden>
+        <div class="row-between">
+          <h2 id="runDetailTitle">트랜잭션 상세</h2>
+          <button class="secondary" id="runDetailCloseBtn">닫기</button>
+        </div>
+        <div id="runDetailBody"></div>
       </div>
     </section>
 

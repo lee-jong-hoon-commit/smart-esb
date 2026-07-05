@@ -1,12 +1,22 @@
 import { Router } from "express";
-import { getRecentRuns, summarizeRange } from "../monitoring/logStore.js";
+import { getRunDetail, getRunsPage, summarizeRange } from "../monitoring/logStore.js";
 
 export const monitoringRouter = Router();
 
 monitoringRouter.get("/runs", async (req, res) => {
-  const limit = Math.min(Number(req.query.limit ?? 50), 200);
-  const flowId = typeof req.query.flowId === "string" ? req.query.flowId : undefined;
-  res.json(await getRecentRuns(limit, flowId));
+  const page = Math.max(1, Number(req.query.page ?? 1));
+  const pageSize = Math.min(Math.max(1, Number(req.query.pageSize ?? 20)), 100);
+  const interfaceId = typeof req.query.interfaceId === "string" ? req.query.interfaceId : undefined;
+  res.json(await getRunsPage(page, pageSize, interfaceId));
+});
+
+monitoringRouter.get("/runs/:transactionId", async (req, res) => {
+  const detail = await getRunDetail(req.params.transactionId);
+  if (!detail) {
+    res.status(404).json({ error: "transaction not found" });
+    return;
+  }
+  res.json(detail);
 });
 
 monitoringRouter.get("/summary", async (req, res) => {

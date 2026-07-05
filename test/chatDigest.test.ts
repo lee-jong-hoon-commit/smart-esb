@@ -22,32 +22,32 @@ describe("answerQuestion (AI 없이 평문 요약)", () => {
     expect(result.range.label).toBe("최근 1시간");
   });
 
-  it("summarizes success-only runs without listing any failures", async () => {
+  it("summarizes success-only runs without listing any problems", async () => {
     await recordRun({
-      flowId: randomUUID(),
-      flowName: "정상 연계",
-      timestamp: new Date().toISOString(),
-      durationMs: 5,
-      received: 2,
-      success: 2,
-      failed: 0,
-      errors: [],
+      transactionId: `TXN-${randomUUID()}`,
+      interfaceId: `IF-${randomUUID()}`,
+      interfaceName: "정상 연계",
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      recordCount: 2,
+      result: "SUCCESS",
+      errorDetail: null,
     });
     const result = await answerQuestion("최근 1시간 상황 알려줘");
-    expect(result.answer).toContain("실패 0건");
+    expect(result.answer).toContain("실패/부분실패 0건");
     expect(result.answer).not.toContain("정상 연계:");
   });
 
-  it("names the failing flow and a sample error message", async () => {
+  it("names the failing interface and a sample error message", async () => {
     await recordRun({
-      flowId: randomUUID(),
-      flowName: "고장난 연계",
-      timestamp: new Date().toISOString(),
-      durationMs: 5,
-      received: 2,
-      success: 0,
-      failed: 2,
-      errors: ["HTTP 목적지 전송 실패: 500 Internal Server Error"],
+      transactionId: `TXN-${randomUUID()}`,
+      interfaceId: `IF-${randomUUID()}`,
+      interfaceName: "고장난 연계",
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      recordCount: 2,
+      result: "FAILED",
+      errorDetail: "HTTP 목적지 전송 실패: 500 Internal Server Error",
     });
     const result = await answerQuestion("최근 1시간 상황 알려줘");
     expect(result.answer).toContain("고장난 연계");

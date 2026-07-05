@@ -1,21 +1,35 @@
-export interface FlowRunLog {
-  id: number;
-  flowId: string;
-  flowName: string;
-  timestamp: string;
-  durationMs: number;
-  received: number;
-  success: number;
-  failed: number;
-  errors: string[];
+export type InterfaceResult = "SUCCESS" | "PARTIAL" | "FAILED";
+
+export interface RunRecord {
+  id: string;
+  payload: unknown;
+  status: "SUCCESS" | "FAILED";
+  error?: string;
 }
 
-export interface FlowErrorSummary {
-  flowId: string;
-  flowName: string;
+export interface InterfaceRunSummary {
+  transactionId: string;
+  interfaceId: string;
+  interfaceName: string;
+  startedAt: string;
+  endedAt: string;
+  durationMs: number;
+  recordCount: number;
+  result: InterfaceResult;
+  errorDetail: string | null;
+}
+
+export interface InterfaceRunDetail extends InterfaceRunSummary {
+  records: RunRecord[];
+}
+
+export interface InterfaceErrorSummary {
+  interfaceId: string;
+  interfaceName: string;
   runs: number;
-  received: number;
-  success: number;
-  failed: number;
+  recordCount: number;
+  successRuns: number;
+  partialRuns: number;
+  failedRuns: number;
   sampleErrors: string[];
 }

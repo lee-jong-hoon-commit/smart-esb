@@ -1,24 +1,25 @@
 import { summarizeRange } from "./logStore.js";
-import type { FlowErrorSummary } from "./types.js";
+import type { InterfaceErrorSummary } from "./types.js";
 import { parseTimeRange } from "./timeRange.js";
 
 export interface ChatAnswer {
   answer: string;
   range: { from: string; to: string; label: string };
-  summary: FlowErrorSummary[];
+  summary: InterfaceErrorSummary[];
 }
 
-function plainDigest(label: string, summary: FlowErrorSummary[]): string {
+function plainDigest(label: string, summary: InterfaceErrorSummary[]): string {
   if (summary.length === 0) return `${label} 동안 실행된 연계가 없습니다.`;
   const totalRuns = summary.reduce((s, f) => s + f.runs, 0);
-  const totalFailed = summary.reduce((s, f) => s + f.failed, 0);
-  const lines = [`${label} 동안 총 ${totalRuns}회 실행, 실패 ${totalFailed}건입니다.`];
+  const totalProblems = summary.reduce((s, f) => s + f.failedRuns + f.partialRuns, 0);
+  const lines = [`${label} 동안 총 ${totalRuns}건 실행, 실패/부분실패 ${totalProblems}건입니다.`];
   for (const f of summary) {
-    if (f.failed === 0) continue;
+    const problems = f.failedRuns + f.partialRuns;
+    if (problems === 0) continue;
     const sample = f.sampleErrors[0] ? ` (예: ${f.sampleErrors[0]})` : "";
-    lines.push(`- ${f.flowName}: ${f.runs}회 실행 중 ${f.failed}건 실패${sample}`);
+    lines.push(`- ${f.interfaceName}: ${f.runs}건 실행 중 ${problems}건 실패/부분실패${sample}`);
   }
-  if (totalFailed === 0) lines.push("실패한 연계는 없습니다.");
+  if (totalProblems === 0) lines.push("실패한 연계는 없습니다.");
   return lines.join("\n");
 }
 

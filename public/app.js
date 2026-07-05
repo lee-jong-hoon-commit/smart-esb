@@ -1,3 +1,8 @@
+const state = {
+  page: 1,
+  pageSize: 20,
+};
+
 async function api(method, path, body) {
   const res = await fetch(path, {
     method,
@@ -17,6 +22,12 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+function resultTag(result) {
+  if (result === "SUCCESS") return '<span class="tag tag-ok">성공</span>';
+  if (result === "PARTIAL") return '<span class="tag tag-partial">부분실패</span>';
+  return '<span class="tag tag-fail">실패</span>';
+}
+
 // ---------- Tabs ----------
 document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.addEventListener("click", () => activateTab(btn.dataset.tab));
@@ -30,36 +41,119 @@ function activateTab(tab) {
 // ---------- Monitoring ----------
 async function loadMonitoring() {
   const container = document.getElementById("monitoringTable");
+  const pager = document.getElementById("monitoringPager");
   container.innerHTML = '<p class="hint">불러오는 중…</p>';
   try {
-    const runs = await api("GET", "/api/monitoring/runs?limit=50");
-    if (runs.length === 0) {
+    const result = await api("GET", `/api/monitoring/runs?page=${state.page}&pageSize=${state.pageSize}`);
+    if (result.rows.length === 0) {
       container.innerHTML = '<p class="hint">실행 이력이 없습니다.</p>';
+      pager.innerHTML = "";
       return;
     }
-    const rows = runs
+    const rows = result.rows
       .map(
-        (r) => `<tr>
-          <td>${new Date(r.timestamp).toLocaleString()}</td>
-          <td>${escapeHtml(r.flowName)}</td>
+        (r) => `<tr data-transaction-id="${escapeHtml(r.transactionId)}">
+          <td class="mono">${escapeHtml(r.transactionId)}</td>
+          <td>${escapeHtml(r.interfaceName)}<div class="hint">${escapeHtml(r.interfaceId)}</div></td>
+          <td>${new Date(r.startedAt).toLocaleString()}</td>
+          <td>${new Date(r.endedAt).toLocaleString()}</td>
+          <td>${r.recordCount}</td>
+          <td>${resultTag(r.result)}</td>
+          <td>${r.errorDetail ? `<span class="error">${escapeHtml(r.errorDetail)}</span>` : "-"}</td>
           <td>${r.durationMs}ms</td>
-          <td>${r.received}</td>
-          <td>${r.failed > 0 ? `<span class="tag tag-fail">실패 ${r.failed}</span>` : '<span class="tag tag-ok">성공</span>'}</td>
-          <td>${r.errors && r.errors.length ? `<span class="error">${escapeHtml(r.errors.join("; "))}</span>` : "-"}</td>
         </tr>`,
       )
       .join("");
     container.innerHTML = `
       <table>
-        <thead><tr><th>시각</th><th>Flow</th><th>소요</th><th>수신</th><th>결과</th><th>에러</th></tr></thead>
+        <thead>
+          <tr>
+            <th>트랜잭션ID</th><th>인터페이스명(ID)</th><th>시작시간</th><th>종료시간</th>
+            <th>건수</th><th>결과</th><th>에러내용</th><th>소요시간</th>
+          </tr>
+        </thead>
         <tbody>${rows}</tbody>
       </table>
     `;
+    container.querySelectorAll("tbody tr").forEach((tr) => {
+      tr.addEventListener("click", () => showRunDetail(tr.dataset.transactionId));
+    });
+
+    pager.innerHTML = `
+      <button class="secondary" id="pagerPrev" ${result.page <= 1 ? "disabled" : ""}>이전</button>
+      <span class="hint">페이지 ${result.page} / ${result.totalPages} (총 ${result.total}건)</span>
+      <button class="secondary" id="pagerNext" ${result.page >= result.totalPages ? "disabled" : ""}>다음</button>
+    `;
+    document.getElementById("pagerPrev")?.addEventListener("click", () => {
+      state.page = Math.max(1, state.page - 1);
+      loadMonitoring();
+    });
+    document.getElementById("pagerNext")?.addEventListener("click", () => {
+      state.page = state.page + 1;
+      loadMonitoring();
+    });
   } catch (err) {
     container.innerHTML = `<p class="error">${err.message}</p>`;
+    pager.innerHTML = "";
   }
 }
-document.getElementById("monitoringRefreshBtn").addEventListener("click", loadMonitoring);
+document.getElementById("monitoringRefreshBtn").addEventListener("click", () => {
+  state.page = 1;
+  loadMonitoring();
+});
+
+async function showRunDetail(transactionId) {
+  const detail = document.getElementById("runDetail");
+  const title = document.getElementById("runDetailTitle");
+  const body = document.getElementById("runDetailBody");
+  try {
+    const run = await api("GET", `/api/monitoring/runs/${encodeURIComponent(transactionId)}`);
+    detail.hidden = false;
+    title.textContent = `트랜잭션 상세: ${run.transactionId}`;
+
+    const recordRows = run.records
+      .map(
+        (r) => `<tr>
+          <td class="mono">${escapeHtml(r.id)}</td>
+          <td><pre class="result">${escapeHtml(JSON.stringify(r.payload, null, 2))}</pre></td>
+          <td>${resultTag(r.status === "SUCCESS" ? "SUCCESS" : "FAILED")}</td>
+          <td>${r.error ? `<span class="error">${escapeHtml(r.error)}</span>` : "-"}</td>
+        </tr>`,
+      )
+      .join("");
+
+    body.innerHTML = `
+      <table>
+        <tbody>
+          <tr><th>인터페이스</th><td>${escapeHtml(run.interfaceName)} (${escapeHtml(run.interfaceId)})</td></tr>
+          <tr><th>시작시간</th><td>${new Date(run.startedAt).toLocaleString()}</td></tr>
+          <tr><th>종료시간</th><td>${new Date(run.endedAt).toLocaleString()}</td></tr>
+          <tr><th>소요시간</th><td>${run.durationMs}ms</td></tr>
+          <tr><th>건수</th><td>${run.recordCount}</td></tr>
+          <tr><th>결과</th><td>${resultTag(run.result)}</td></tr>
+          <tr><th>에러내용</th><td>${run.errorDetail ? `<span class="error">${escapeHtml(run.errorDetail)}</span>` : "-"}</td></tr>
+        </tbody>
+      </table>
+      <h3>레코드별 상세 (${run.records.length}건)</h3>
+      ${
+        run.records.length
+          ? `<table>
+              <thead><tr><th>레코드ID</th><th>데이터</th><th>상태</th><th>에러</th></tr></thead>
+              <tbody>${recordRows}</tbody>
+            </table>`
+          : '<p class="hint">레코드 상세 데이터가 없습니다.</p>'
+      }
+    `;
+    detail.scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (err) {
+    detail.hidden = false;
+    title.textContent = "트랜잭션 상세";
+    body.innerHTML = `<p class="error">${err.message}</p>`;
+  }
+}
+document.getElementById("runDetailCloseBtn").addEventListener("click", () => {
+  document.getElementById("runDetail").hidden = true;
+});
 
 // ---------- Chat ----------
 function appendChatMessage(role, text, note) {

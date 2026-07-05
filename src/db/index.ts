@@ -9,18 +9,19 @@ export const db = new Database(path.join(config.dataDir, "smart-esb.sqlite"));
 db.pragma("journal_mode = WAL");
 
 db.exec(`
-  CREATE TABLE IF NOT EXISTS flow_runs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    flow_id TEXT NOT NULL,
-    flow_name TEXT NOT NULL,
-    timestamp TEXT NOT NULL,
+  CREATE TABLE IF NOT EXISTS interface_runs (
+    transaction_id TEXT PRIMARY KEY,
+    interface_id TEXT NOT NULL,
+    interface_name TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT NOT NULL,
     duration_ms INTEGER NOT NULL,
-    received INTEGER NOT NULL,
-    success INTEGER NOT NULL,
-    failed INTEGER NOT NULL,
-    errors_json TEXT
+    record_count INTEGER NOT NULL,
+    result TEXT NOT NULL,
+    error_detail TEXT,
+    records_json TEXT
   );
 
-  CREATE INDEX IF NOT EXISTS idx_flow_runs_flow_id ON flow_runs (flow_id, id);
-  CREATE INDEX IF NOT EXISTS idx_flow_runs_timestamp ON flow_runs (timestamp);
+  CREATE INDEX IF NOT EXISTS idx_interface_runs_interface ON interface_runs (interface_id, started_at);
+  CREATE INDEX IF NOT EXISTS idx_interface_runs_started_at ON interface_runs (started_at);
 `);
