@@ -30,7 +30,7 @@ const INTERFACES: InterfaceDef[] = [
     interfaceName: "일 배치 정산 연계",
     failureRate: 0.08,
     connectorType: "FILE",
-    connectorConfig: { path: "./data/samples/erp-settlement.json" },
+    connectorConfig: { path: "./data/samples/erp-settlement.json", pollIntervalSec: 86400 },
     makeRecord: (i) => ({
       settlementNo: `STL-${20260700 + i}`,
       amount: randomInt(50000, 2000000),
@@ -42,7 +42,7 @@ const INTERFACES: InterfaceDef[] = [
     interfaceName: "신규 주문 연계",
     failureRate: 0.35,
     connectorType: "DB",
-    connectorConfig: { table: "orders", watermarkColumn: "id" },
+    connectorConfig: { table: "orders", watermarkColumn: "id", pollIntervalSec: 300 },
     makeRecord: (i) => ({
       orderNo: `ORD-${3000 + i}`,
       customer: pick(["(주)한빛물산", "대성유통", "청년마트", "미래상사"]),
@@ -66,7 +66,12 @@ const INTERFACES: InterfaceDef[] = [
     interfaceName: "레거시 결재 파일 브릿지",
     failureRate: 0.6,
     connectorType: "HTTP",
-    connectorConfig: { url: "http://10.20.30.41:8080/api/erp/expense", method: "POST", serviceIp: "10.20.30.41" },
+    connectorConfig: {
+      url: "http://10.20.30.41:8080/api/erp/expense",
+      method: "POST",
+      serviceIp: "10.20.30.41",
+      timeoutMs: 800,
+    },
     makeRecord: (i) => ({
       docId: `APR-${58000 + i}`,
       requester: pick(["kim.jieun", "park.minsu", "choi.yuna"]),

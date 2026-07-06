@@ -40,15 +40,21 @@
     </section>
 
     <section id="tab-connectors" class="tab-panel">
+      <nav class="subtabs">
+        <button class="subtab-btn conntype-btn active" data-conntype="HTTP">HTTP</button>
+        <button class="subtab-btn conntype-btn" data-conntype="QUEUE">QUEUE</button>
+        <button class="subtab-btn conntype-btn" data-conntype="DB">DB</button>
+        <button class="subtab-btn conntype-btn" data-conntype="FILE">FILE</button>
+      </nav>
       <div class="card">
         <div class="row-between">
-          <h2>커넥터 모니터링</h2>
+          <h2 id="connectorsTitle">HTTP 커넥터 모니터링</h2>
           <button id="connectorsRefreshBtn">새로고침</button>
         </div>
-        <p class="hint">
-          커넥터 타입(큐/HTTP/DB/FILE)별로 오늘 처리 현황과 연결 상태를 봅니다.
-        </p>
+        <p class="hint" id="connectorsHint"></p>
+        <input type="text" id="connectorsSearchInput" placeholder="인터페이스 이름으로 검색" class="search-input" />
         <div id="connectorsList"></div>
+        <div id="connectorsPager" class="pager"></div>
       </div>
     </section>
 

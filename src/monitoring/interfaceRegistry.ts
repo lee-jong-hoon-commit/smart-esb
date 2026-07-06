@@ -48,6 +48,45 @@ export async function listInterfaces(): Promise<InterfaceRegistryEntry[]> {
   return rows.map(rowToEntry);
 }
 
+export interface InterfaceRegistryPage {
+  rows: InterfaceRegistryEntry[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+// 커넥터 타입별로 인터페이스가 수천~수만 개로 늘어날 수 있으므로, 전체를 내려주지 않고
+// SQL 단에서 타입 필터 + 이름 검색(LIKE) + 페이지네이션(LIMIT/OFFSET)을 적용합니다.
+export async function listInterfacesPage(
+  connectorType: ConnectorType,
+  page = 1,
+  pageSize = 20,
+  search?: string,
+): Promise<InterfaceRegistryPage> {
+  const safePage = Math.max(1, page);
+  const offset = (safePage - 1) * pageSize;
+  const searchFilter = search?.trim() ? `%${search.trim()}%` : null;
+
+  const whereClause = searchFilter ? "connector_type = ? AND interface_name LIKE ?" : "connector_type = ?";
+  const params: (string | number)[] = searchFilter ? [connectorType, searchFilter] : [connectorType];
+
+  const totalRow = db.prepare(`SELECT COUNT(*) as total FROM interfaces WHERE ${whereClause}`).get(...params) as {
+    total: number;
+  };
+  const rows = db
+    .prepare(`SELECT * FROM interfaces WHERE ${whereClause} ORDER BY interface_name ASC LIMIT ? OFFSET ?`)
+    .all(...params, pageSize, offset) as InterfaceRow[];
+
+  return {
+    rows: rows.map(rowToEntry),
+    page: safePage,
+    pageSize,
+    total: totalRow.total,
+    totalPages: Math.max(1, Math.ceil(totalRow.total / pageSize)),
+  };
+}
+
 export async function getInterface(interfaceId: string): Promise<InterfaceRegistryEntry | undefined> {
   const row = db.prepare("SELECT * FROM interfaces WHERE interface_id = ?").get(interfaceId) as
     | InterfaceRow

@@ -1,16 +1,29 @@
 import { randomUUID } from "node:crypto";
 import { db } from "../src/db/index.js";
-import type { ConnectorType } from "../src/monitoring/connectorTypes.js";
+import type { ConnectorConfig, ConnectorType } from "../src/monitoring/connectorTypes.js";
 
-// 인터페이스가 수천 개로 늘어나는 상황을 실제로 재현해서 /api/stats/by-interface의
-// 검색+페이지네이션이 실제로 버티는지 확인하기 위한 스트레스 테스트용 시드입니다.
-// 실행: npm run seed:scale (기본 3000개, 인자로 개수 지정 가능: npm run seed:scale -- 10000)
+// 인터페이스가 수천 개로 늘어나는 상황을 실제로 재현해서 /api/stats/by-interface,
+// /api/connectors의 검색+페이지네이션이 실제로 버티는지 확인하기 위한 스트레스 테스트용
+// 시드입니다. 실행: npm run seed:scale (기본 3000개, 인자로 개수 지정 가능: npm run seed:scale -- 10000)
 
 const COUNT = Number(process.argv[2] ?? 3000);
 const CONNECTOR_TYPES: ConnectorType[] = ["QUEUE", "HTTP", "DB", "FILE"];
 
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function buildScaleConfig(type: ConnectorType, i: number): ConnectorConfig {
+  switch (type) {
+    case "QUEUE":
+      return { source: `SRC-${i}`, destination: `DST-${i}`, queueName: `scale-queue-${i}` };
+    case "HTTP":
+      return { url: `http://10.0.${i % 250}.${(i * 7) % 250}:8080/api`, method: "POST", serviceIp: `10.0.${i % 250}.${(i * 7) % 250}`, timeoutMs: 1000 };
+    case "DB":
+      return { table: `scale_table_${i % 50}`, watermarkColumn: "id", pollIntervalSec: 300 };
+    case "FILE":
+      return { path: `/data/scale/file_${i}.json`, pollIntervalSec: 3600 };
+  }
 }
 
 async function seedScale() {
@@ -30,12 +43,14 @@ async function seedScale() {
         `INSERT INTO interfaces (interface_id, interface_name, connector_type, config_json, created_at)
          VALUES (@interfaceId, @interfaceName, @connectorType, @configJson, @createdAt)
          ON CONFLICT(interface_id) DO UPDATE SET
-           interface_name = excluded.interface_name, connector_type = excluded.connector_type`,
+           interface_name = excluded.interface_name,
+           connector_type = excluded.connector_type,
+           config_json = excluded.config_json`,
       ).run({
         interfaceId,
         interfaceName,
         connectorType,
-        configJson: JSON.stringify({ note: "stress-test" }),
+        configJson: JSON.stringify(buildScaleConfig(connectorType, i)),
         createdAt: new Date().toISOString(),
       });
 

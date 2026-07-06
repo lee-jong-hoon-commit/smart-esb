@@ -195,6 +195,26 @@ function formatLastRunAt(iso) {
   return iso ? new Date(iso).toLocaleString() : "-";
 }
 
+function formatDurationSec(sec) {
+  if (sec === null || sec === undefined) return "-";
+  if (sec < 60) return `${sec}초`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}분 ${sec % 60}초`;
+  const hr = Math.floor(min / 60);
+  return `${hr}시간 ${min % 60}분`;
+}
+
+function scheduleStatusTag(status) {
+  if (status === "정상") return '<span class="tag tag-ok">정상</span>';
+  if (status === "지연") return '<span class="tag tag-fail">지연</span>';
+  return '<span class="tag">알수없음</span>';
+}
+
+function recentErrorsBlock(errors) {
+  if (!errors || errors.length === 0) return "-";
+  return `<ul class="recent-errors">${errors.map((e) => `<li class="error-text">${escapeHtml(e)}</li>`).join("")}</ul>`;
+}
+
 function connectorTypeFields(c) {
   if (c.connectorType === "QUEUE") {
     const statusClass = c.status === "정상" ? "tag-ok" : "tag-fail";
@@ -202,33 +222,82 @@ function connectorTypeFields(c) {
       <tr><th>경로</th><td>${escapeHtml(c.source)} → ${escapeHtml(c.destination)} (큐: ${escapeHtml(c.queueName)})</td></tr>
       <tr><th>상태</th><td><span class="tag ${statusClass}">${escapeHtml(c.status)}</span></td></tr>
       <tr><th>적체 건수</th><td>${c.backlogCount}건</td></tr>
+      <tr><th>최고 적체 시간</th><td>${formatDurationSec(c.oldestBacklogAgeSec)}</td></tr>
     `;
   }
   if (c.connectorType === "HTTP") {
     return `
       <tr><th>호출 주소</th><td class="mono">${escapeHtml(c.method)} ${escapeHtml(c.url)}</td></tr>
       <tr><th>서비스 IP</th><td class="mono">${escapeHtml(c.serviceIp)}</td></tr>
+      <tr><th>타임아웃</th><td>${c.timeoutMs}ms</td></tr>
+      <tr><th>느린 호출 비율</th><td>${c.slowRunRatePct}%</td></tr>
     `;
   }
   if (c.connectorType === "DB") {
     return `
       <tr><th>테이블</th><td class="mono">${escapeHtml(c.table)}</td></tr>
       <tr><th>워터마크 컬럼</th><td class="mono">${escapeHtml(c.watermarkColumn)}</td></tr>
+      <tr><th>폴링 주기</th><td>${c.pollIntervalSec ? `${c.pollIntervalSec}초` : "-"}</td></tr>
+      <tr><th>스케줄 상태</th><td>${scheduleStatusTag(c.scheduleStatus)}</td></tr>
     `;
   }
-  return `<tr><th>파일 경로</th><td class="mono">${escapeHtml(c.path)}</td></tr>`;
+  return `
+    <tr><th>파일 경로</th><td class="mono">${escapeHtml(c.path)}</td></tr>
+    <tr><th>폴링 주기</th><td>${c.pollIntervalSec ? `${c.pollIntervalSec}초` : "-"}</td></tr>
+    <tr><th>스케줄 상태</th><td>${scheduleStatusTag(c.scheduleStatus)}</td></tr>
+  `;
+}
+
+const CONNTYPE_META = {
+  HTTP: { title: "HTTP 커넥터 모니터링", hint: "오늘 호출 건수/성공/실패, 서비스 IP, 평균/최소/최대 소요시간, 느린 호출 비율을 확인합니다." },
+  QUEUE: { title: "QUEUE 커넥터 모니터링", hint: "큐 경로(출발 → 도착), 적체 건수, 최고 적체 시간, 처리 상태를 확인합니다." },
+  DB: { title: "DB 커넥터 모니터링", hint: "폴링 주기 대비 마지막 실행 시각을 기준으로 지연 여부를 확인합니다." },
+  FILE: { title: "FILE 커넥터 모니터링", hint: "폴링 주기 대비 마지막 실행 시각을 기준으로 지연 여부를 확인합니다." },
+};
+
+const connState = {
+  type: "HTTP",
+  page: 1,
+  pageSize: 20,
+  search: "",
+};
+
+document.querySelectorAll(".conntype-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".conntype-btn").forEach((b) => b.classList.toggle("active", b === btn));
+    connState.type = btn.dataset.conntype;
+    connState.page = 1;
+    connState.search = "";
+    document.getElementById("connectorsSearchInput").value = "";
+    const meta = CONNTYPE_META[connState.type];
+    document.getElementById("connectorsTitle").textContent = meta.title;
+    document.getElementById("connectorsHint").textContent = meta.hint;
+    loadConnectors();
+  });
+});
+{
+  const meta = CONNTYPE_META[connState.type];
+  document.getElementById("connectorsHint").textContent = meta.hint;
 }
 
 async function loadConnectors() {
   const container = document.getElementById("connectorsList");
+  const pager = document.getElementById("connectorsPager");
   container.innerHTML = '<p class="hint">불러오는 중…</p>';
   try {
-    const connectors = await api("GET", "/api/connectors");
-    if (connectors.length === 0) {
+    const params = new URLSearchParams({
+      type: connState.type,
+      page: String(connState.page),
+      pageSize: String(connState.pageSize),
+    });
+    if (connState.search) params.set("search", connState.search);
+    const result = await api("GET", `/api/connectors?${params}`);
+    if (result.rows.length === 0) {
       container.innerHTML = '<p class="hint">등록된 인터페이스가 없습니다.</p>';
+      pager.innerHTML = "";
       return;
     }
-    container.innerHTML = `<div class="connector-grid">${connectors
+    container.innerHTML = `<div class="connector-grid">${result.rows
       .map(
         (c) => `
       <div class="card connector-card">
@@ -237,19 +306,48 @@ async function loadConnectors() {
         <table>
           <tbody>
             ${connectorTypeFields(c)}
-            <tr><th>오늘 처리</th><td>${c.todayCount}건 (성공 ${c.todaySuccess} / 실패 ${c.todayFailed})</td></tr>
-            <tr><th>평균 소요시간</th><td>${c.avgDurationMs}ms</td></tr>
+            <tr><th>오늘 처리</th><td>${c.todayCount}건 (성공 ${c.todaySuccess} / 실패 ${c.todayFailed}, 실패율 ${c.failureRatePct}%)</td></tr>
+            <tr><th>소요시간</th><td>평균 ${c.avgDurationMs}ms (최소 ${c.minDurationMs}ms / 최대 ${c.maxDurationMs}ms)</td></tr>
             <tr><th>마지막 처리</th><td>${formatLastRunAt(c.lastRunAt)}</td></tr>
+            <tr><th>최근 에러</th><td>${recentErrorsBlock(c.recentErrors)}</td></tr>
           </tbody>
         </table>
       </div>`,
       )
       .join("")}</div>`;
+
+    pager.innerHTML = `
+      <button class="secondary" id="connectorsPagerPrev" ${result.page <= 1 ? "disabled" : ""}>이전</button>
+      <span class="hint">페이지 ${result.page} / ${result.totalPages} (총 ${result.total}개 인터페이스)</span>
+      <button class="secondary" id="connectorsPagerNext" ${result.page >= result.totalPages ? "disabled" : ""}>다음</button>
+    `;
+    document.getElementById("connectorsPagerPrev")?.addEventListener("click", () => {
+      connState.page = Math.max(1, connState.page - 1);
+      loadConnectors();
+    });
+    document.getElementById("connectorsPagerNext")?.addEventListener("click", () => {
+      connState.page += 1;
+      loadConnectors();
+    });
   } catch (err) {
     container.innerHTML = `<p class="error">${err.message}</p>`;
+    pager.innerHTML = "";
   }
 }
-document.getElementById("connectorsRefreshBtn").addEventListener("click", loadConnectors);
+document.getElementById("connectorsRefreshBtn").addEventListener("click", () => {
+  connState.page = 1;
+  loadConnectors();
+});
+
+let connectorsSearchDebounce;
+document.getElementById("connectorsSearchInput").addEventListener("input", (e) => {
+  clearTimeout(connectorsSearchDebounce);
+  connectorsSearchDebounce = setTimeout(() => {
+    connState.search = e.target.value;
+    connState.page = 1;
+    loadConnectors();
+  }, 300);
+});
 
 // ---------- Stats / charts ----------
 const CONNECTOR_TYPE_LABEL = { QUEUE: "큐", HTTP: "HTTP", DB: "DB", FILE: "FILE", UNKNOWN: "미등록" };
