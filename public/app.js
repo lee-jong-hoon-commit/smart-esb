@@ -37,7 +37,7 @@ function activateTab(tab) {
   document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
   if (tab === "connectors") loadConnectors();
-  if (tab === "stats") loadStats();
+  if (tab === "stats") loadDailyStats();
 }
 
 // ---------- Monitoring ----------
@@ -254,19 +254,55 @@ document.getElementById("connectorsRefreshBtn").addEventListener("click", loadCo
 // ---------- Stats / charts ----------
 const CONNECTOR_TYPE_LABEL = { QUEUE: "큐", HTTP: "HTTP", DB: "DB", FILE: "FILE", UNKNOWN: "미등록" };
 
+const statsState = {
+  dailyDays: 30,
+  interfacePage: 1,
+  interfacePageSize: 20,
+  interfaceSearch: "",
+};
+
 function formatShortDate(dateStr) {
   return dateStr.slice(5).replace("-", "/");
 }
 
-function renderDailyChart(daily) {
-  const maxTotal = Math.max(1, ...daily.map((d) => d.count));
+function formatBucketLabel(dateStr, bucket) {
+  if (bucket === "day") return formatShortDate(dateStr);
+  const [start, end] = dateStr.split("~");
+  return end ? `${formatShortDate(start)}~${formatShortDate(end)}` : formatShortDate(start);
+}
+
+// ---------- Sub-tabs ----------
+document.querySelectorAll(".subtab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => activateSubtab(btn.dataset.subtab));
+});
+
+function activateSubtab(name) {
+  document.querySelectorAll(".subtab-btn").forEach((b) => b.classList.toggle("active", b.dataset.subtab === name));
+  document.querySelectorAll(".subtab-panel").forEach((p) => p.classList.toggle("active", p.id === `substat-${name}`));
+  if (name === "daily") loadDailyStats();
+  if (name === "type") loadTypeStats();
+  if (name === "interface") loadInterfaceStats();
+}
+
+function renderDailyChart({ bucket, series }) {
+  const hint = document.getElementById("dailyBucketHint");
+  hint.textContent =
+    bucket === "week"
+      ? "선택한 기간이 31일을 넘어 막대가 너무 많아지지 않도록 7일 단위로 묶어서 표시합니다."
+      : "";
+
+  const maxTotal = Math.max(1, ...series.map((d) => d.count));
   const maxBarPx = 140;
-  const cols = daily
-    .map((d) => {
+  // 버킷이 많아지면(예: 180일 -> 주간 26개) 축 라벨을 전부 찍으면 서로 겹치므로,
+  // 라벨은 목표 개수(8개)만큼만 성기게 보여줍니다 (막대와 값 라벨은 그대로 전부 표시).
+  const labelEvery = Math.max(1, Math.ceil(series.length / 8));
+  const cols = series
+    .map((d, i) => {
       const barPx = d.count > 0 ? Math.max(4, Math.round((d.count / maxTotal) * maxBarPx)) : 0;
       const failedPx = d.count > 0 ? Math.round((d.failed / d.count) * barPx) : 0;
       const successPx = barPx - failedPx;
-      const label = formatShortDate(d.date);
+      const label = formatBucketLabel(d.date, bucket);
+      const showLabel = i % labelEvery === 0;
       const title = `${label} 총 ${d.count}건 (성공 ${d.success} / 실패 ${d.failed})`;
       return `
         <div class="chart-col">
@@ -275,17 +311,17 @@ function renderDailyChart(daily) {
             <div class="seg seg-success" style="height:${successPx}px"></div>
             ${failedPx > 0 ? `<div class="seg-gap"></div><div class="seg seg-failed" style="height:${failedPx}px"></div>` : ""}
           </div>
-          <div class="chart-axis-label">${label}</div>
+          <div class="chart-axis-label">${showLabel ? label : ""}</div>
         </div>`;
     })
     .join("");
-  document.getElementById("dailyChart").innerHTML = `<div class="chart-row">${cols}</div>`;
+  document.getElementById("dailyChart").innerHTML = `<div class="table-scroll"><div class="chart-row">${cols}</div></div>`;
 
-  const rows = daily
-    .map((d) => `<tr><td>${formatShortDate(d.date)}</td><td>${d.count}</td><td>${d.success}</td><td>${d.failed}</td></tr>`)
+  const rows = series
+    .map((d) => `<tr><td>${formatBucketLabel(d.date, bucket)}</td><td>${d.count}</td><td>${d.success}</td><td>${d.failed}</td></tr>`)
     .join("");
   document.getElementById("dailyTable").innerHTML = `
-    <table><thead><tr><th>날짜</th><th>건수</th><th>성공</th><th>실패</th></tr></thead><tbody>${rows}</tbody></table>
+    <table><thead><tr><th>${bucket === "week" ? "기간" : "날짜"}</th><th>건수</th><th>성공</th><th>실패</th></tr></thead><tbody>${rows}</tbody></table>
   `;
 }
 
@@ -313,7 +349,8 @@ function renderTypeChart(byConnectorType) {
   `;
 }
 
-function renderInterfaceChart(byInterface) {
+function renderInterfaceChart(page) {
+  const byInterface = page.rows;
   const maxCount = Math.max(1, ...byInterface.map((i) => i.count));
   const rows = byInterface
     .map((i) => {
@@ -345,19 +382,72 @@ function renderInterfaceChart(byInterface) {
   document.getElementById("interfaceTable").innerHTML = `
     <table><thead><tr><th>인터페이스</th><th>타입</th><th>건수</th><th>성공</th><th>실패</th></tr></thead><tbody>${tableRows}</tbody></table>
   `;
+
+  const pager = document.getElementById("interfacePager");
+  pager.innerHTML = `
+    <button class="secondary" id="interfacePagerPrev" ${page.page <= 1 ? "disabled" : ""}>이전</button>
+    <span class="hint">페이지 ${page.page} / ${page.totalPages} (총 ${page.total}개 인터페이스)</span>
+    <button class="secondary" id="interfacePagerNext" ${page.page >= page.totalPages ? "disabled" : ""}>다음</button>
+  `;
+  document.getElementById("interfacePagerPrev")?.addEventListener("click", () => {
+    statsState.interfacePage = Math.max(1, statsState.interfacePage - 1);
+    loadInterfaceStats();
+  });
+  document.getElementById("interfacePagerNext")?.addEventListener("click", () => {
+    statsState.interfacePage += 1;
+    loadInterfaceStats();
+  });
 }
 
-async function loadStats() {
+async function loadDailyStats() {
   try {
-    const stats = await api("GET", "/api/stats?days=7");
-    renderDailyChart(stats.daily);
-    renderTypeChart(stats.byConnectorType);
-    renderInterfaceChart(stats.byInterface);
+    renderDailyChart(await api("GET", `/api/stats/daily?days=${statsState.dailyDays}`));
   } catch (err) {
     document.getElementById("dailyChart").innerHTML = `<p class="error">${err.message}</p>`;
   }
 }
-document.getElementById("statsRefreshBtn").addEventListener("click", loadStats);
+document.getElementById("dailyRefreshBtn").addEventListener("click", loadDailyStats);
+document.querySelectorAll("#dailyRangeSelect .range-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#dailyRangeSelect .range-btn").forEach((b) => b.classList.toggle("active", b === btn));
+    statsState.dailyDays = Number(btn.dataset.days);
+    loadDailyStats();
+  });
+});
+
+async function loadTypeStats() {
+  try {
+    renderTypeChart(await api("GET", "/api/stats/by-type?days=30"));
+  } catch (err) {
+    document.getElementById("typeChart").innerHTML = `<p class="error">${err.message}</p>`;
+  }
+}
+document.getElementById("typeRefreshBtn").addEventListener("click", loadTypeStats);
+
+async function loadInterfaceStats() {
+  try {
+    const params = new URLSearchParams({
+      days: "30",
+      page: String(statsState.interfacePage),
+      pageSize: String(statsState.interfacePageSize),
+    });
+    if (statsState.interfaceSearch) params.set("search", statsState.interfaceSearch);
+    renderInterfaceChart(await api("GET", `/api/stats/by-interface?${params}`));
+  } catch (err) {
+    document.getElementById("interfaceChart").innerHTML = `<p class="error">${err.message}</p>`;
+  }
+}
+document.getElementById("interfaceRefreshBtn").addEventListener("click", loadInterfaceStats);
+
+let interfaceSearchDebounce;
+document.getElementById("interfaceSearchInput").addEventListener("input", (e) => {
+  clearTimeout(interfaceSearchDebounce);
+  interfaceSearchDebounce = setTimeout(() => {
+    statsState.interfaceSearch = e.target.value;
+    statsState.interfacePage = 1;
+    loadInterfaceStats();
+  }, 300);
+});
 
 // ---------- Chat ----------
 function appendChatMessage(role, text, note) {
