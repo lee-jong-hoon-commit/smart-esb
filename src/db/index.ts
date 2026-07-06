@@ -25,4 +25,12 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_interface_runs_interface ON interface_runs (interface_id, started_at);
   CREATE INDEX IF NOT EXISTS idx_interface_runs_started_at ON interface_runs (started_at);
+
+  CREATE TABLE IF NOT EXISTS interfaces (
+    interface_id TEXT PRIMARY KEY,
+    interface_name TEXT NOT NULL,
+    connector_type TEXT NOT NULL,
+    config_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
 `);

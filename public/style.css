@@ -147,6 +147,27 @@ th { color: var(--muted); font-weight: 500; }
 .tag-ok { color: var(--success); border-color: var(--success); }
 .tag-partial { color: #d97706; border-color: #d97706; }
 
+.connector-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+.connector-card { margin-bottom: 0; }
+.connector-card h3 { margin: 6px 0 10px; font-size: 0.95rem; }
+.connector-card table { table-layout: fixed; }
+.connector-card table th {
+  width: 92px;
+  white-space: nowrap;
+  padding-right: 10px;
+}
+.connector-card table td { word-break: break-word; }
+.connector-type-badge {
+  font-weight: 600;
+  color: var(--accent);
+  border-color: var(--accent);
+  letter-spacing: 0.03em;
+}
+
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; }
 
 tbody tr[data-transaction-id] { cursor: pointer; }

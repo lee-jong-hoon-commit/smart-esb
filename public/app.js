@@ -36,6 +36,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 function activateTab(tab) {
   document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
+  if (tab === "connectors") loadConnectors();
 }
 
 // ---------- Monitoring ----------
@@ -187,6 +188,67 @@ async function resendRecord(transactionId, recordId, btn) {
 document.getElementById("runDetailCloseBtn").addEventListener("click", () => {
   document.getElementById("runDetail").hidden = true;
 });
+
+// ---------- Connector monitoring ----------
+function formatLastRunAt(iso) {
+  return iso ? new Date(iso).toLocaleString() : "-";
+}
+
+function connectorTypeFields(c) {
+  if (c.connectorType === "QUEUE") {
+    const statusClass = c.status === "정상" ? "tag-ok" : "tag-fail";
+    return `
+      <tr><th>경로</th><td>${escapeHtml(c.source)} → ${escapeHtml(c.destination)} (큐: ${escapeHtml(c.queueName)})</td></tr>
+      <tr><th>상태</th><td><span class="tag ${statusClass}">${escapeHtml(c.status)}</span></td></tr>
+      <tr><th>적체 건수</th><td>${c.backlogCount}건</td></tr>
+    `;
+  }
+  if (c.connectorType === "HTTP") {
+    return `
+      <tr><th>호출 주소</th><td class="mono">${escapeHtml(c.method)} ${escapeHtml(c.url)}</td></tr>
+      <tr><th>서비스 IP</th><td class="mono">${escapeHtml(c.serviceIp)}</td></tr>
+    `;
+  }
+  if (c.connectorType === "DB") {
+    return `
+      <tr><th>테이블</th><td class="mono">${escapeHtml(c.table)}</td></tr>
+      <tr><th>워터마크 컬럼</th><td class="mono">${escapeHtml(c.watermarkColumn)}</td></tr>
+    `;
+  }
+  return `<tr><th>파일 경로</th><td class="mono">${escapeHtml(c.path)}</td></tr>`;
+}
+
+async function loadConnectors() {
+  const container = document.getElementById("connectorsList");
+  container.innerHTML = '<p class="hint">불러오는 중…</p>';
+  try {
+    const connectors = await api("GET", "/api/connectors");
+    if (connectors.length === 0) {
+      container.innerHTML = '<p class="hint">등록된 인터페이스가 없습니다.</p>';
+      return;
+    }
+    container.innerHTML = `<div class="connector-grid">${connectors
+      .map(
+        (c) => `
+      <div class="card connector-card">
+        <span class="tag connector-type-badge">${escapeHtml(c.connectorType)}</span>
+        <h3>${escapeHtml(c.interfaceName)}</h3>
+        <table>
+          <tbody>
+            ${connectorTypeFields(c)}
+            <tr><th>오늘 처리</th><td>${c.todayCount}건 (성공 ${c.todaySuccess} / 실패 ${c.todayFailed})</td></tr>
+            <tr><th>평균 소요시간</th><td>${c.avgDurationMs}ms</td></tr>
+            <tr><th>마지막 처리</th><td>${formatLastRunAt(c.lastRunAt)}</td></tr>
+          </tbody>
+        </table>
+      </div>`,
+      )
+      .join("")}</div>`;
+  } catch (err) {
+    container.innerHTML = `<p class="error">${err.message}</p>`;
+  }
+}
+document.getElementById("connectorsRefreshBtn").addEventListener("click", loadConnectors);
 
 // ---------- Chat ----------
 function appendChatMessage(role, text, note) {

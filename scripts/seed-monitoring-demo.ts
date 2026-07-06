@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import type { ConnectorConfig, ConnectorType } from "../src/monitoring/connectorTypes.js";
+import { upsertInterface } from "../src/monitoring/interfaceRegistry.js";
 import { recordRun } from "../src/monitoring/logStore.js";
 import type { RunRecord } from "../src/monitoring/types.js";
 
@@ -9,6 +11,8 @@ interface InterfaceDef {
   interfaceId: string;
   interfaceName: string;
   failureRate: number; // 트랜잭션이 하나라도 실패를 포함할 확률
+  connectorType: ConnectorType;
+  connectorConfig: ConnectorConfig;
   makeRecord: (i: number) => unknown;
 }
 
@@ -25,6 +29,8 @@ const INTERFACES: InterfaceDef[] = [
     interfaceId: "IF-SETTLE-001",
     interfaceName: "일 배치 정산 연계",
     failureRate: 0.08,
+    connectorType: "FILE",
+    connectorConfig: { path: "./data/samples/erp-settlement.json" },
     makeRecord: (i) => ({
       settlementNo: `STL-${20260700 + i}`,
       amount: randomInt(50000, 2000000),
@@ -35,6 +41,8 @@ const INTERFACES: InterfaceDef[] = [
     interfaceId: "IF-ORDER-002",
     interfaceName: "신규 주문 연계",
     failureRate: 0.35,
+    connectorType: "DB",
+    connectorConfig: { table: "orders", watermarkColumn: "id" },
     makeRecord: (i) => ({
       orderNo: `ORD-${3000 + i}`,
       customer: pick(["(주)한빛물산", "대성유통", "청년마트", "미래상사"]),
@@ -45,6 +53,8 @@ const INTERFACES: InterfaceDef[] = [
     interfaceId: "IF-MALL-003",
     interfaceName: "쇼핑몰 주문 실시간 연계",
     failureRate: 0.05,
+    connectorType: "QUEUE",
+    connectorConfig: { source: "쇼핑몰 웹훅", destination: "사내 ERP", queueName: "shopping-mall-orders" },
     makeRecord: (i) => ({
       orderId: `SM-${9000 + i}`,
       buyerName: pick(["hong gil dong", "kim minsu", "lee jieun"]),
@@ -55,6 +65,8 @@ const INTERFACES: InterfaceDef[] = [
     interfaceId: "IF-LEGACY-004",
     interfaceName: "레거시 결재 파일 브릿지",
     failureRate: 0.6,
+    connectorType: "HTTP",
+    connectorConfig: { url: "http://10.20.30.41:8080/api/erp/expense", method: "POST", serviceIp: "10.20.30.41" },
     makeRecord: (i) => ({
       docId: `APR-${58000 + i}`,
       requester: pick(["kim.jieun", "park.minsu", "choi.yuna"]),
@@ -90,6 +102,15 @@ async function seed() {
   const now = Date.now();
   let count = 0;
   const perInterfaceCounts = new Map<string, { runs: number; problems: number }>();
+
+  for (const iface of INTERFACES) {
+    await upsertInterface({
+      interfaceId: iface.interfaceId,
+      interfaceName: iface.interfaceName,
+      connectorType: iface.connectorType,
+      config: iface.connectorConfig,
+    });
+  }
 
   for (let daysAgo = 2; daysAgo >= 0; daysAgo--) {
     for (const iface of INTERFACES) {
@@ -129,7 +150,9 @@ async function seed() {
     }
   }
 
-  console.log(`더미 트랜잭션 ${count}건을 삽입했습니다 (인터페이스 ${INTERFACES.length}개, 최근 3일).`);
+  console.log(
+    `인터페이스 ${INTERFACES.length}개 등록(${INTERFACES.map((i) => i.connectorType).join("/")}) + 더미 트랜잭션 ${count}건을 삽입했습니다 (최근 3일).`,
+  );
   for (const [name, stats] of perInterfaceCounts) {
     console.log(`  - ${name}: ${stats.runs}건 실행, 실패/부분실패 ${stats.problems}건`);
   }

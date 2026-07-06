@@ -13,6 +13,7 @@
 
   <nav class="tabs">
     <button class="tab-btn active" data-tab="monitoring">모니터링</button>
+    <button class="tab-btn" data-tab="connectors">커넥터 모니터링</button>
     <button class="tab-btn" data-tab="chat">챗봇</button>
   </nav>
 
@@ -34,6 +35,19 @@
           <button class="secondary" id="runDetailCloseBtn">닫기</button>
         </div>
         <div id="runDetailBody"></div>
+      </div>
+    </section>
+
+    <section id="tab-connectors" class="tab-panel">
+      <div class="card">
+        <div class="row-between">
+          <h2>커넥터 모니터링</h2>
+          <button id="connectorsRefreshBtn">새로고침</button>
+        </div>
+        <p class="hint">
+          커넥터 타입(큐/HTTP/DB/FILE)별로 오늘 처리 현황과 연결 상태를 봅니다.
+        </p>
+        <div id="connectorsList"></div>
       </div>
     </section>
 
