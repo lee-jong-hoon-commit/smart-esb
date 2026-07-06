@@ -34,3 +34,14 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 `);
+
+// CREATE TABLE IF NOT EXISTS는 이미 존재하는 테이블에 새 컬럼을 추가해주지 않으므로,
+// 스키마가 바뀔 때마다 기존 DB 파일에 누락된 컬럼을 여기서 보강합니다.
+function ensureColumn(table: string, column: string, addColumnDdl: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!columns.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${addColumnDdl}`);
+  }
+}
+
+ensureColumn("interface_runs", "failed_count", "failed_count INTEGER NOT NULL DEFAULT 0");
