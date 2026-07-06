@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { chatRouter } from "./routes/chat.js";
 import { connectorsRouter } from "./routes/connectors.js";
 import { monitoringRouter } from "./routes/monitoring.js";
+import { statsRouter } from "./routes/stats.js";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const publicDir = path.join(projectRoot, "public");
@@ -21,6 +22,7 @@ export function createServer() {
   app.use("/api/monitoring", monitoringRouter);
   app.use("/api/chat", chatRouter);
   app.use("/api/connectors", connectorsRouter);
+  app.use("/api/stats", statsRouter);
 
   app.use(express.static(publicDir));
 

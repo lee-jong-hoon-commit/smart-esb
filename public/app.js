@@ -37,6 +37,7 @@ function activateTab(tab) {
   document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
   if (tab === "connectors") loadConnectors();
+  if (tab === "stats") loadStats();
 }
 
 // ---------- Monitoring ----------
@@ -249,6 +250,114 @@ async function loadConnectors() {
   }
 }
 document.getElementById("connectorsRefreshBtn").addEventListener("click", loadConnectors);
+
+// ---------- Stats / charts ----------
+const CONNECTOR_TYPE_LABEL = { QUEUE: "큐", HTTP: "HTTP", DB: "DB", FILE: "FILE", UNKNOWN: "미등록" };
+
+function formatShortDate(dateStr) {
+  return dateStr.slice(5).replace("-", "/");
+}
+
+function renderDailyChart(daily) {
+  const maxTotal = Math.max(1, ...daily.map((d) => d.count));
+  const maxBarPx = 140;
+  const cols = daily
+    .map((d) => {
+      const barPx = d.count > 0 ? Math.max(4, Math.round((d.count / maxTotal) * maxBarPx)) : 0;
+      const failedPx = d.count > 0 ? Math.round((d.failed / d.count) * barPx) : 0;
+      const successPx = barPx - failedPx;
+      const label = formatShortDate(d.date);
+      const title = `${label} 총 ${d.count}건 (성공 ${d.success} / 실패 ${d.failed})`;
+      return `
+        <div class="chart-col">
+          <div class="chart-value">${d.count || ""}</div>
+          <div class="chart-stack" style="height:${barPx}px" title="${title}">
+            <div class="seg seg-success" style="height:${successPx}px"></div>
+            ${failedPx > 0 ? `<div class="seg-gap"></div><div class="seg seg-failed" style="height:${failedPx}px"></div>` : ""}
+          </div>
+          <div class="chart-axis-label">${label}</div>
+        </div>`;
+    })
+    .join("");
+  document.getElementById("dailyChart").innerHTML = `<div class="chart-row">${cols}</div>`;
+
+  const rows = daily
+    .map((d) => `<tr><td>${formatShortDate(d.date)}</td><td>${d.count}</td><td>${d.success}</td><td>${d.failed}</td></tr>`)
+    .join("");
+  document.getElementById("dailyTable").innerHTML = `
+    <table><thead><tr><th>날짜</th><th>건수</th><th>성공</th><th>실패</th></tr></thead><tbody>${rows}</tbody></table>
+  `;
+}
+
+function renderTypeChart(byConnectorType) {
+  const maxCount = Math.max(1, ...byConnectorType.map((c) => c.count));
+  const rows = byConnectorType
+    .map((c) => {
+      const pct = Math.max(2, Math.round((c.count / maxCount) * 100));
+      const label = CONNECTOR_TYPE_LABEL[c.connectorType] ?? c.connectorType;
+      return `
+        <div class="hbar-row">
+          <div class="hbar-label">${escapeHtml(label)}</div>
+          <div class="hbar-track"><div class="hbar-fill" style="width:${pct}%" title="${escapeHtml(label)}: ${c.count}건"></div></div>
+          <div class="hbar-value">${c.count}건</div>
+        </div>`;
+    })
+    .join("");
+  document.getElementById("typeChart").innerHTML = rows || '<p class="hint">데이터가 없습니다.</p>';
+
+  const tableRows = byConnectorType
+    .map((c) => `<tr><td>${escapeHtml(CONNECTOR_TYPE_LABEL[c.connectorType] ?? c.connectorType)}</td><td>${c.count}</td><td>${c.success}</td><td>${c.failed}</td></tr>`)
+    .join("");
+  document.getElementById("typeTable").innerHTML = `
+    <table><thead><tr><th>커넥터 타입</th><th>건수</th><th>성공</th><th>실패</th></tr></thead><tbody>${tableRows}</tbody></table>
+  `;
+}
+
+function renderInterfaceChart(byInterface) {
+  const maxCount = Math.max(1, ...byInterface.map((i) => i.count));
+  const rows = byInterface
+    .map((i) => {
+      const widthPct = Math.max(2, Math.round((i.count / maxCount) * 100));
+      const successPct = i.count > 0 ? Math.round((i.success / i.count) * 100) : 0;
+      const failedPct = 100 - successPct;
+      const title = `${i.interfaceName}: 총 ${i.count}건 (성공 ${i.success} / 실패 ${i.failed})`;
+      return `
+        <div class="hbar-row">
+          <div class="hbar-label" title="${escapeHtml(i.interfaceName)}">${escapeHtml(i.interfaceName)}</div>
+          <div class="hbar-track">
+            <div class="hbar-stack" style="width:${widthPct}%" title="${escapeHtml(title)}">
+              <div class="seg seg-success" style="width:${successPct}%"></div>
+              ${i.failed > 0 ? `<div class="seg-gap-v"></div><div class="seg seg-failed" style="width:${failedPct}%"></div>` : ""}
+            </div>
+          </div>
+          <div class="hbar-value">${i.count}건 (실패 ${i.failed})</div>
+        </div>`;
+    })
+    .join("");
+  document.getElementById("interfaceChart").innerHTML = rows || '<p class="hint">데이터가 없습니다.</p>';
+
+  const tableRows = byInterface
+    .map(
+      (i) =>
+        `<tr><td>${escapeHtml(i.interfaceName)}</td><td>${escapeHtml(CONNECTOR_TYPE_LABEL[i.connectorType] ?? i.connectorType)}</td><td>${i.count}</td><td>${i.success}</td><td>${i.failed}</td></tr>`,
+    )
+    .join("");
+  document.getElementById("interfaceTable").innerHTML = `
+    <table><thead><tr><th>인터페이스</th><th>타입</th><th>건수</th><th>성공</th><th>실패</th></tr></thead><tbody>${tableRows}</tbody></table>
+  `;
+}
+
+async function loadStats() {
+  try {
+    const stats = await api("GET", "/api/stats?days=7");
+    renderDailyChart(stats.daily);
+    renderTypeChart(stats.byConnectorType);
+    renderInterfaceChart(stats.byInterface);
+  } catch (err) {
+    document.getElementById("dailyChart").innerHTML = `<p class="error">${err.message}</p>`;
+  }
+}
+document.getElementById("statsRefreshBtn").addEventListener("click", loadStats);
 
 // ---------- Chat ----------
 function appendChatMessage(role, text, note) {

@@ -83,6 +83,19 @@ function pick<T>(arr: T[]): T {
   return arr[randomInt(0, arr.length - 1)];
 }
 
+// daysAgo=0(오늘)일 때는 반드시 "오늘 자정 ~ 지금" 사이로만 떨어지도록 상한을 현재 시각으로 고정합니다.
+// (예전 코드는 오늘도 최대 20시간 59분 전을 뺐는데, 현재 시각이 이보다 이르면 어제로 넘어가버려서
+//  커넥터 모니터링의 "오늘 처리" 수치가 0으로 보이는 문제가 있었습니다.)
+function randomTimestampWithinDay(daysAgo: number): Date {
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  dayStart.setDate(dayStart.getDate() - daysAgo);
+
+  const dayEnd = daysAgo === 0 ? new Date() : new Date(dayStart.getTime() + 86_400_000 - 1000);
+  const span = Math.max(1000, dayEnd.getTime() - dayStart.getTime());
+  return new Date(dayStart.getTime() + randomInt(0, span));
+}
+
 function buildRecords(iface: InterfaceDef, count: number, hasFailures: boolean): RunRecord[] {
   const failIndex = hasFailures ? randomInt(0, count - 1) : -1;
   const records: RunRecord[] = [];
@@ -99,7 +112,6 @@ function buildRecords(iface: InterfaceDef, count: number, hasFailures: boolean):
 }
 
 async function seed() {
-  const now = Date.now();
   let count = 0;
   const perInterfaceCounts = new Map<string, { runs: number; problems: number }>();
 
@@ -112,13 +124,11 @@ async function seed() {
     });
   }
 
-  for (let daysAgo = 2; daysAgo >= 0; daysAgo--) {
+  for (let daysAgo = 6; daysAgo >= 0; daysAgo--) {
     for (const iface of INTERFACES) {
       const runsToday = randomInt(4, 9);
       for (let i = 0; i < runsToday; i++) {
-        const startedAt = new Date(
-          now - daysAgo * 86_400_000 - randomInt(0, 20) * 3600_000 - randomInt(0, 59) * 60_000,
-        );
+        const startedAt = randomTimestampWithinDay(daysAgo);
         const durationMs = randomInt(20, 900);
         const endedAt = new Date(startedAt.getTime() + durationMs);
         const recordCount = randomInt(1, 6);
@@ -151,7 +161,7 @@ async function seed() {
   }
 
   console.log(
-    `인터페이스 ${INTERFACES.length}개 등록(${INTERFACES.map((i) => i.connectorType).join("/")}) + 더미 트랜잭션 ${count}건을 삽입했습니다 (최근 3일).`,
+    `인터페이스 ${INTERFACES.length}개 등록(${INTERFACES.map((i) => i.connectorType).join("/")}) + 더미 트랜잭션 ${count}건을 삽입했습니다 (최근 7일).`,
   );
   for (const [name, stats] of perInterfaceCounts) {
     console.log(`  - ${name}: ${stats.runs}건 실행, 실패/부분실패 ${stats.problems}건`);
