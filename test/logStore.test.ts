@@ -8,6 +8,7 @@ let recordRun: (typeof import("../src/monitoring/logStore.js"))["recordRun"];
 let getRecentRuns: (typeof import("../src/monitoring/logStore.js"))["getRecentRuns"];
 let getRunDetail: (typeof import("../src/monitoring/logStore.js"))["getRunDetail"];
 let getRunsPage: (typeof import("../src/monitoring/logStore.js"))["getRunsPage"];
+let resendRecord: (typeof import("../src/monitoring/logStore.js"))["resendRecord"];
 let summarizeRange: (typeof import("../src/monitoring/logStore.js"))["summarizeRange"];
 
 // env vars must be set before db/index.js (via config.js) is first imported, since it reads
@@ -19,6 +20,7 @@ beforeAll(async () => {
   getRecentRuns = logStore.getRecentRuns;
   getRunDetail = logStore.getRunDetail;
   getRunsPage = logStore.getRunsPage;
+  resendRecord = logStore.resendRecord;
   summarizeRange = logStore.summarizeRange;
 });
 
@@ -33,6 +35,7 @@ describe("logStore", () => {
       startedAt: "2026-07-05T00:00:00.000Z",
       endedAt: "2026-07-05T00:00:00.500Z",
       recordCount: 3,
+      failedCount: 1,
       result: "PARTIAL",
       errorDetail: "목적지 전송 실패: 500",
     });
@@ -52,6 +55,7 @@ describe("logStore", () => {
       startedAt: "2026-07-05T00:00:00.000Z",
       endedAt: "2026-07-05T00:00:01.000Z",
       recordCount: 2,
+      failedCount: 1,
       result: "PARTIAL",
       errorDetail: "HTTP 목적지 전송 실패: 500",
       records: [
@@ -83,6 +87,7 @@ describe("logStore", () => {
       startedAt: now.toISOString(),
       endedAt: now.toISOString(),
       recordCount: 2,
+      failedCount: 2,
       result: "FAILED",
       errorDetail: "HTTP 목적지 전송 실패: 500 Internal Server Error",
     });
@@ -93,6 +98,7 @@ describe("logStore", () => {
       startedAt: now.toISOString(),
       endedAt: now.toISOString(),
       recordCount: 1,
+      failedCount: 0,
       result: "SUCCESS",
       errorDetail: null,
     });
@@ -116,6 +122,7 @@ describe("logStore", () => {
       startedAt: farPast,
       endedAt: farPast,
       recordCount: 1,
+      failedCount: 0,
       result: "SUCCESS",
       errorDetail: null,
     });
@@ -138,6 +145,7 @@ describe("logStore", () => {
         startedAt: new Date(base + i * 1000).toISOString(),
         endedAt: new Date(base + i * 1000).toISOString(),
         recordCount: 1,
+        failedCount: 0,
         result: "SUCCESS",
         errorDetail: null,
       });
@@ -152,5 +160,65 @@ describe("logStore", () => {
 
     const page3 = await getRunsPage(3, 10, interfaceId);
     expect(page3.rows).toHaveLength(5);
+  });
+
+  it("resends a failed record and recomputes the run to SUCCESS when it was the only failure", async () => {
+    const transactionId = `TXN-${randomUUID()}`;
+    await recordRun({
+      transactionId,
+      interfaceId: `IF-${randomUUID()}`,
+      interfaceName: "재전송 테스트",
+      startedAt: "2026-07-05T00:00:00.000Z",
+      endedAt: "2026-07-05T00:00:01.000Z",
+      recordCount: 2,
+      failedCount: 1,
+      result: "PARTIAL",
+      errorDetail: "HTTP 목적지 전송 실패: 500",
+      records: [
+        { id: "r1", payload: { orderNo: "ORD-1" }, status: "SUCCESS" },
+        { id: "r2", payload: { orderNo: "ORD-2" }, status: "FAILED", error: "HTTP 목적지 전송 실패: 500" },
+      ],
+    });
+
+    const updated = await resendRecord(transactionId, "r2");
+    expect(updated).toBeDefined();
+    expect(updated!.records.find((r) => r.id === "r2")!.status).toBe("SUCCESS");
+    expect(updated!.records.find((r) => r.id === "r2")!.error).toBeUndefined();
+    expect(updated!.failedCount).toBe(0);
+    expect(updated!.result).toBe("SUCCESS");
+    expect(updated!.errorDetail).toBeNull();
+
+    const persisted = await getRunDetail(transactionId);
+    expect(persisted!.result).toBe("SUCCESS");
+    expect(persisted!.failedCount).toBe(0);
+  });
+
+  it("recomputes to PARTIAL (not SUCCESS) when other records are still failed", async () => {
+    const transactionId = `TXN-${randomUUID()}`;
+    await recordRun({
+      transactionId,
+      interfaceId: `IF-${randomUUID()}`,
+      interfaceName: "부분 재전송 테스트",
+      startedAt: "2026-07-05T00:00:00.000Z",
+      endedAt: "2026-07-05T00:00:01.000Z",
+      recordCount: 3,
+      failedCount: 2,
+      result: "PARTIAL",
+      errorDetail: "에러 A",
+      records: [
+        { id: "a", payload: {}, status: "SUCCESS" },
+        { id: "b", payload: {}, status: "FAILED", error: "에러 A" },
+        { id: "c", payload: {}, status: "FAILED", error: "에러 B" },
+      ],
+    });
+
+    const updated = await resendRecord(transactionId, "b");
+    expect(updated!.result).toBe("PARTIAL");
+    expect(updated!.failedCount).toBe(1);
+    expect(updated!.errorDetail).toBe("에러 B");
+  });
+
+  it("returns undefined when resending a record on an unknown transaction", async () => {
+    expect(await resendRecord("TXN-does-not-exist", "r1")).toBeUndefined();
   });
 });

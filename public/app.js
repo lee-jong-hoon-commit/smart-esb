@@ -58,7 +58,7 @@ async function loadMonitoring() {
           <td class="cell-ellipsis" title="${escapeHtml(interfaceLabel)}">${escapeHtml(interfaceLabel)}</td>
           <td class="cell-ellipsis">${new Date(r.startedAt).toLocaleString()}</td>
           <td class="cell-ellipsis">${new Date(r.endedAt).toLocaleString()}</td>
-          <td class="col-count">${r.recordCount}</td>
+          <td class="col-count">${r.failedCount > 0 ? `<span class="error-text">${r.failedCount}</span>` : r.failedCount}/${r.recordCount}</td>
           <td class="col-result">${resultTag(r.result)}</td>
           <td class="cell-ellipsis" title="${r.errorDetail ? escapeHtml(r.errorDetail) : ""}">${r.errorDetail ? `<span class="error-text">${escapeHtml(r.errorDetail)}</span>` : "-"}</td>
           <td class="col-duration">${r.durationMs}ms</td>
@@ -109,6 +109,52 @@ document.getElementById("monitoringRefreshBtn").addEventListener("click", () => 
   loadMonitoring();
 });
 
+function renderRunDetail(run) {
+  const title = document.getElementById("runDetailTitle");
+  const body = document.getElementById("runDetailBody");
+  title.textContent = `트랜잭션 상세: ${run.transactionId}`;
+
+  const recordRows = run.records
+    .map((r) => {
+      const isFailed = r.status === "FAILED";
+      return `<tr>
+        <td class="mono">${escapeHtml(r.id)}</td>
+        <td><pre class="result">${escapeHtml(JSON.stringify(r.payload, null, 2))}</pre></td>
+        <td>${resultTag(isFailed ? "FAILED" : "SUCCESS")}</td>
+        <td>${r.error ? `<span class="error">${escapeHtml(r.error)}</span>` : "-"}</td>
+        <td>${isFailed ? `<button class="secondary resend-btn" data-record-id="${escapeHtml(r.id)}">재전송</button>` : "-"}</td>
+      </tr>`;
+    })
+    .join("");
+
+  body.innerHTML = `
+    <table>
+      <tbody>
+        <tr><th>인터페이스</th><td>${escapeHtml(run.interfaceName)} (${escapeHtml(run.interfaceId)})</td></tr>
+        <tr><th>시작시간</th><td>${new Date(run.startedAt).toLocaleString()}</td></tr>
+        <tr><th>종료시간</th><td>${new Date(run.endedAt).toLocaleString()}</td></tr>
+        <tr><th>소요시간</th><td>${run.durationMs}ms</td></tr>
+        <tr><th>건수</th><td>${run.failedCount}/${run.recordCount}</td></tr>
+        <tr><th>결과</th><td>${resultTag(run.result)}</td></tr>
+        <tr><th>에러내용</th><td>${run.errorDetail ? `<span class="error">${escapeHtml(run.errorDetail)}</span>` : "-"}</td></tr>
+      </tbody>
+    </table>
+    <h3>레코드별 상세 (${run.records.length}건)</h3>
+    ${
+      run.records.length
+        ? `<table>
+            <thead><tr><th>레코드ID</th><th>데이터</th><th>상태</th><th>에러</th><th>작업</th></tr></thead>
+            <tbody>${recordRows}</tbody>
+          </table>`
+        : '<p class="hint">레코드 상세 데이터가 없습니다.</p>'
+    }
+  `;
+
+  body.querySelectorAll(".resend-btn").forEach((btn) => {
+    btn.addEventListener("click", () => resendRecord(run.transactionId, btn.dataset.recordId, btn));
+  });
+}
+
 async function showRunDetail(transactionId) {
   const detail = document.getElementById("runDetail");
   const title = document.getElementById("runDetailTitle");
@@ -116,46 +162,26 @@ async function showRunDetail(transactionId) {
   try {
     const run = await api("GET", `/api/monitoring/runs/${encodeURIComponent(transactionId)}`);
     detail.hidden = false;
-    title.textContent = `트랜잭션 상세: ${run.transactionId}`;
-
-    const recordRows = run.records
-      .map(
-        (r) => `<tr>
-          <td class="mono">${escapeHtml(r.id)}</td>
-          <td><pre class="result">${escapeHtml(JSON.stringify(r.payload, null, 2))}</pre></td>
-          <td>${resultTag(r.status === "SUCCESS" ? "SUCCESS" : "FAILED")}</td>
-          <td>${r.error ? `<span class="error">${escapeHtml(r.error)}</span>` : "-"}</td>
-        </tr>`,
-      )
-      .join("");
-
-    body.innerHTML = `
-      <table>
-        <tbody>
-          <tr><th>인터페이스</th><td>${escapeHtml(run.interfaceName)} (${escapeHtml(run.interfaceId)})</td></tr>
-          <tr><th>시작시간</th><td>${new Date(run.startedAt).toLocaleString()}</td></tr>
-          <tr><th>종료시간</th><td>${new Date(run.endedAt).toLocaleString()}</td></tr>
-          <tr><th>소요시간</th><td>${run.durationMs}ms</td></tr>
-          <tr><th>건수</th><td>${run.recordCount}</td></tr>
-          <tr><th>결과</th><td>${resultTag(run.result)}</td></tr>
-          <tr><th>에러내용</th><td>${run.errorDetail ? `<span class="error">${escapeHtml(run.errorDetail)}</span>` : "-"}</td></tr>
-        </tbody>
-      </table>
-      <h3>레코드별 상세 (${run.records.length}건)</h3>
-      ${
-        run.records.length
-          ? `<table>
-              <thead><tr><th>레코드ID</th><th>데이터</th><th>상태</th><th>에러</th></tr></thead>
-              <tbody>${recordRows}</tbody>
-            </table>`
-          : '<p class="hint">레코드 상세 데이터가 없습니다.</p>'
-      }
-    `;
+    renderRunDetail(run);
     detail.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (err) {
     detail.hidden = false;
     title.textContent = "트랜잭션 상세";
     body.innerHTML = `<p class="error">${err.message}</p>`;
+  }
+}
+
+async function resendRecord(transactionId, recordId, btn) {
+  btn.disabled = true;
+  btn.textContent = "재전송 중…";
+  try {
+    const updated = await api("POST", `/api/monitoring/runs/${encodeURIComponent(transactionId)}/records/${encodeURIComponent(recordId)}/resend`);
+    renderRunDetail(updated);
+    await loadMonitoring();
+  } catch (err) {
+    alert(`재전송 실패: ${err.message}`);
+    btn.disabled = false;
+    btn.textContent = "재전송";
   }
 }
 document.getElementById("runDetailCloseBtn").addEventListener("click", () => {

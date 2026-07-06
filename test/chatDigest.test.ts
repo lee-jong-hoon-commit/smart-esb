@@ -30,6 +30,7 @@ describe("answerQuestion (AI 없이 평문 요약)", () => {
       startedAt: new Date().toISOString(),
       endedAt: new Date().toISOString(),
       recordCount: 2,
+      failedCount: 0,
       result: "SUCCESS",
       errorDetail: null,
     });
@@ -46,6 +47,7 @@ describe("answerQuestion (AI 없이 평문 요약)", () => {
       startedAt: new Date().toISOString(),
       endedAt: new Date().toISOString(),
       recordCount: 2,
+      failedCount: 2,
       result: "FAILED",
       errorDetail: "HTTP 목적지 전송 실패: 500 Internal Server Error",
     });

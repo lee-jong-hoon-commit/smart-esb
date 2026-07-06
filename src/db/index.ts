@@ -17,6 +17,7 @@ db.exec(`
     ended_at TEXT NOT NULL,
     duration_ms INTEGER NOT NULL,
     record_count INTEGER NOT NULL,
+    failed_count INTEGER NOT NULL DEFAULT 0,
     result TEXT NOT NULL,
     error_detail TEXT,
     records_json TEXT

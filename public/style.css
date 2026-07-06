@@ -130,9 +130,9 @@ th { color: var(--muted); font-weight: 500; }
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: middle;
+  text-align: right;
 }
 .mon-table .cell-ellipsis { max-width: 0; }
-.mon-table .col-count, .mon-table .col-duration { text-align: right; }
 
 .tag {
   display: inline-block;
@@ -152,9 +152,12 @@ th { color: var(--muted); font-weight: 500; }
 tbody tr[data-transaction-id] { cursor: pointer; }
 tbody tr[data-transaction-id]:hover { background: var(--mono-bg); }
 
+.resend-btn { padding: 4px 10px; font-size: 0.75rem; white-space: nowrap; }
+
 .pager {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 12px;

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getRunDetail, getRunsPage, summarizeRange } from "../monitoring/logStore.js";
+import { getRunDetail, getRunsPage, resendRecord, summarizeRange } from "../monitoring/logStore.js";
 
 export const monitoringRouter = Router();
 
@@ -17,6 +17,20 @@ monitoringRouter.get("/runs/:transactionId", async (req, res) => {
     return;
   }
   res.json(detail);
+});
+
+monitoringRouter.post("/runs/:transactionId/records/:recordId/resend", async (req, res) => {
+  const { transactionId, recordId } = req.params;
+  const before = await getRunDetail(transactionId);
+  if (!before) {
+    res.status(404).json({ error: "transaction not found" });
+    return;
+  }
+  if (!before.records.some((r) => r.id === recordId)) {
+    res.status(404).json({ error: "record not found" });
+    return;
+  }
+  res.json(await resendRecord(transactionId, recordId));
 });
 
 monitoringRouter.get("/summary", async (req, res) => {

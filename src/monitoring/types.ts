@@ -15,6 +15,7 @@ export interface InterfaceRunSummary {
   endedAt: string;
   durationMs: number;
   recordCount: number;
+  failedCount: number;
   result: InterfaceResult;
   errorDetail: string | null;
 }

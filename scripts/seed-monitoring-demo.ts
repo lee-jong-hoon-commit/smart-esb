@@ -114,6 +114,7 @@ async function seed() {
           startedAt: startedAt.toISOString(),
           endedAt: endedAt.toISOString(),
           recordCount,
+          failedCount,
           result,
           errorDetail,
           records,

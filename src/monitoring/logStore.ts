@@ -9,6 +9,7 @@ interface RunRow {
   ended_at: string;
   duration_ms: number;
   record_count: number;
+  failed_count: number;
   result: string;
   error_detail: string | null;
   records_json: string | null;
@@ -23,6 +24,7 @@ function rowToSummary(row: RunRow): InterfaceRunSummary {
     endedAt: row.ended_at,
     durationMs: row.duration_ms,
     recordCount: row.record_count,
+    failedCount: row.failed_count,
     result: row.result as InterfaceRunSummary["result"],
     errorDetail: row.error_detail,
   };
@@ -35,6 +37,7 @@ export interface RecordRunInput {
   startedAt: string;
   endedAt: string;
   recordCount: number;
+  failedCount: number;
   result: InterfaceRunSummary["result"];
   errorDetail: string | null;
   records?: RunRecord[];
@@ -44,8 +47,8 @@ export async function recordRun(input: RecordRunInput): Promise<void> {
   const durationMs = new Date(input.endedAt).getTime() - new Date(input.startedAt).getTime();
   db.prepare(
     `INSERT INTO interface_runs
-      (transaction_id, interface_id, interface_name, started_at, ended_at, duration_ms, record_count, result, error_detail, records_json)
-     VALUES (@transactionId, @interfaceId, @interfaceName, @startedAt, @endedAt, @durationMs, @recordCount, @result, @errorDetail, @recordsJson)`,
+      (transaction_id, interface_id, interface_name, started_at, ended_at, duration_ms, record_count, failed_count, result, error_detail, records_json)
+     VALUES (@transactionId, @interfaceId, @interfaceName, @startedAt, @endedAt, @durationMs, @recordCount, @failedCount, @result, @errorDetail, @recordsJson)`,
   ).run({
     transactionId: input.transactionId,
     interfaceId: input.interfaceId,
@@ -54,6 +57,7 @@ export async function recordRun(input: RecordRunInput): Promise<void> {
     endedAt: input.endedAt,
     durationMs,
     recordCount: input.recordCount,
+    failedCount: input.failedCount,
     result: input.result,
     errorDetail: input.errorDetail,
     recordsJson: input.records ? JSON.stringify(input.records) : null,
@@ -110,6 +114,37 @@ export async function getRunDetail(transactionId: string): Promise<InterfaceRunD
     | undefined;
   if (!row) return undefined;
   return { ...rowToSummary(row), records: row.records_json ? JSON.parse(row.records_json) : [] };
+}
+
+function deriveResult(records: RunRecord[]): { result: InterfaceRunSummary["result"]; failedCount: number; errorDetail: string | null } {
+  const failedCount = records.filter((r) => r.status === "FAILED").length;
+  const result: InterfaceRunSummary["result"] =
+    failedCount === 0 ? "SUCCESS" : failedCount === records.length ? "FAILED" : "PARTIAL";
+  const errorDetail = records.find((r) => r.status === "FAILED")?.error ?? null;
+  return { result, failedCount, errorDetail };
+}
+
+// 실패한 레코드를 재전송(재처리)합니다. 이 데모 환경에는 실제 목적지 커넥터가 없으므로
+// 재전송은 항상 성공한 것으로 간주하고, 트랜잭션의 결과/실패건수/에러내용을 다시 계산합니다.
+export async function resendRecord(transactionId: string, recordId: string): Promise<InterfaceRunDetail | undefined> {
+  const detail = await getRunDetail(transactionId);
+  if (!detail) return undefined;
+
+  const records = detail.records.map((r) => (r.id === recordId ? { id: r.id, payload: r.payload, status: "SUCCESS" as const } : r));
+  const { result, failedCount, errorDetail } = deriveResult(records);
+
+  db.prepare(
+    `UPDATE interface_runs SET records_json = @recordsJson, result = @result, failed_count = @failedCount, error_detail = @errorDetail
+     WHERE transaction_id = @transactionId`,
+  ).run({
+    transactionId,
+    recordsJson: JSON.stringify(records),
+    result,
+    failedCount,
+    errorDetail,
+  });
+
+  return { ...detail, records, result, failedCount, errorDetail };
 }
 
 export async function getRunsInRange(fromIso: string, toIso: string): Promise<InterfaceRunSummary[]> {
