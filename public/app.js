@@ -40,6 +40,8 @@ function activateTab(tab) {
   if (tab === "stats") loadDailyStats();
   if (tab === "interfaces") loadIfMgmt();
   if (tab === "resources") loadResMgmt();
+  if (tab === "nodes") loadNodeMgmt();
+  if (tab === "dashboard") loadDashboard();
 }
 
 // ---------- Monitoring ----------
@@ -912,6 +914,400 @@ document.getElementById("resFormEl").addEventListener("submit", async (e) => {
     submitBtn.disabled = false;
   }
 });
+
+// ---------- Node management (adapter/agent/ESB) ----------
+function nodeStatusTag(status) {
+  if (status === "정상") return '<span class="tag tag-ok">정상</span>';
+  if (status === "경고") return '<span class="tag tag-partial">경고</span>';
+  if (status === "장애") return '<span class="tag tag-fail">장애</span>';
+  return '<span class="tag">알수없음</span>';
+}
+
+function resourceBarClass(pct) {
+  if (pct === null || pct === undefined) return "hbar-fill";
+  if (pct < 70) return "hbar-fill hbar-fill-ok";
+  if (pct < 90) return "hbar-fill hbar-fill-warn";
+  return "hbar-fill hbar-fill-danger";
+}
+
+function formatPct(pct) {
+  return pct === null || pct === undefined ? "-" : `${pct}%`;
+}
+
+const NODETYPE_META = {
+  ESB: { title: "ESB 노드 관리", hint: "ESB 엔진 인스턴스를 등록/수정/삭제합니다." },
+  AGENT: { title: "AGENT 노드 관리", hint: "연계 에이전트를 등록/수정/삭제합니다." },
+  ADAPTER: { title: "ADAPTER 노드 관리", hint: "커넥터 어댑터를 등록/수정/삭제합니다." },
+};
+
+const NODE_CONFIG_FIELDS = {
+  ESB: [
+    { key: "port", label: "포트", type: "number", required: true },
+    { key: "version", label: "버전", type: "text", required: true },
+  ],
+  AGENT: [
+    { key: "targetSystem", label: "대상 시스템", type: "text", required: true },
+    { key: "version", label: "버전", type: "text", required: true },
+  ],
+  ADAPTER: [
+    { key: "adapterKind", label: "어댑터 종류", type: "text", required: true, placeholder: "DB_ADAPTER, FILE_ADAPTER 등" },
+    { key: "version", label: "버전", type: "text", required: true },
+  ],
+};
+
+function nodeConfigSummary(entry) {
+  const c = entry.config;
+  if (entry.nodeType === "ESB") return `포트 ${c.port} / v${escapeHtml(c.version)}`;
+  if (entry.nodeType === "AGENT") return `대상: ${escapeHtml(c.targetSystem)} / v${escapeHtml(c.version)}`;
+  return `${escapeHtml(c.adapterKind)} / v${escapeHtml(c.version)}`;
+}
+
+const nodeMgmtState = {
+  type: "ESB",
+  page: 1,
+  pageSize: 20,
+  search: "",
+};
+
+function updateNodeMgmtHeader() {
+  const title = document.getElementById("nodeMgmtTitle");
+  const hint = document.getElementById("nodeMgmtHint");
+  if (nodeMgmtState.search) {
+    title.textContent = "노드 검색 결과 (전체 타입)";
+    hint.textContent = "검색어가 있는 동안은 선택한 소메뉴와 상관없이 모든 노드 타입에서 찾습니다.";
+  } else {
+    const meta = NODETYPE_META[nodeMgmtState.type];
+    title.textContent = meta.title;
+    hint.textContent = meta.hint;
+  }
+}
+
+function updateNodeMgmtHighlight(resultTypes) {
+  document.querySelectorAll(".nodemgmt-type-btn").forEach((b) => {
+    const isActive = nodeMgmtState.search ? resultTypes.has(b.dataset.nodemgmttype) : b.dataset.nodemgmttype === nodeMgmtState.type;
+    b.classList.toggle("active", isActive);
+  });
+}
+
+document.querySelectorAll(".nodemgmt-type-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    nodeMgmtState.type = btn.dataset.nodemgmttype;
+    nodeMgmtState.page = 1;
+    nodeMgmtState.search = "";
+    document.getElementById("nodeMgmtSearchInput").value = "";
+    updateNodeMgmtHeader();
+    updateNodeMgmtHighlight(new Set());
+    loadNodeMgmt();
+  });
+});
+updateNodeMgmtHeader();
+
+async function loadNodeMgmt() {
+  const container = document.getElementById("nodeMgmtTable");
+  const pager = document.getElementById("nodeMgmtPager");
+  container.innerHTML = '<p class="hint">불러오는 중…</p>';
+  try {
+    const params = new URLSearchParams({
+      page: String(nodeMgmtState.page),
+      pageSize: String(nodeMgmtState.pageSize),
+    });
+    if (nodeMgmtState.search) {
+      params.set("search", nodeMgmtState.search);
+    } else {
+      params.set("type", nodeMgmtState.type);
+    }
+    const result = await api("GET", `/api/nodes?${params}`);
+    updateNodeMgmtHighlight(new Set(result.rows.map((r) => r.nodeType)));
+    if (result.rows.length === 0) {
+      container.innerHTML = '<p class="hint">등록된 노드가 없습니다.</p>';
+      pager.innerHTML = "";
+      return;
+    }
+    const rows = result.rows
+      .map(
+        (entry) => `
+      <tr data-node-id="${escapeHtml(entry.nodeId)}">
+        <td class="mono cell-ellipsis" title="${escapeHtml(entry.nodeId)}">${escapeHtml(entry.nodeId)}</td>
+        <td class="cell-ellipsis" title="${escapeHtml(entry.nodeName)}">${escapeHtml(entry.nodeName)}</td>
+        <td><span class="tag connector-type-badge">${escapeHtml(entry.nodeType)}</span></td>
+        <td class="mono cell-ellipsis">${escapeHtml(entry.host)}</td>
+        <td>${nodeStatusTag(entry.status)}</td>
+        <td class="cell-ellipsis">CPU ${formatPct(entry.cpuPct)} / MEM ${formatPct(entry.memPct)} / DISK ${formatPct(entry.diskPct)}</td>
+        <td class="cell-ellipsis" title="${nodeConfigSummary(entry)}">${nodeConfigSummary(entry)}</td>
+        <td class="if-row-actions">
+          <button class="secondary node-edit-btn">수정</button>
+          <button class="secondary node-delete-btn">삭제</button>
+        </td>
+      </tr>`,
+      )
+      .join("");
+    container.innerHTML = `
+      <div class="table-scroll">
+        <table class="mon-table">
+          <colgroup>
+            <col style="width: 12%" /><col style="width: 15%" /><col style="width: 8%" /><col style="width: 12%" />
+            <col style="width: 8%" /><col style="width: 18%" /><col style="width: 15%" /><col style="width: 12%" />
+          </colgroup>
+          <thead>
+            <tr><th>노드ID</th><th>이름</th><th>타입</th><th>호스트</th><th>상태</th><th>자원 사용률</th><th>설정 요약</th><th>작업</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+    container.querySelectorAll("tbody tr").forEach((tr) => {
+      const entry = result.rows.find((r) => r.nodeId === tr.dataset.nodeId);
+      tr.querySelector(".node-edit-btn").addEventListener("click", () => openNodeForm(entry));
+      tr.querySelector(".node-delete-btn").addEventListener("click", () => deleteNodeEntry(entry));
+    });
+
+    pager.innerHTML = `
+      <button class="secondary" id="nodeMgmtPagerPrev" ${result.page <= 1 ? "disabled" : ""}>이전</button>
+      <span class="hint">페이지 ${result.page} / ${result.totalPages} (총 ${result.total}개 노드)</span>
+      <button class="secondary" id="nodeMgmtPagerNext" ${result.page >= result.totalPages ? "disabled" : ""}>다음</button>
+    `;
+    document.getElementById("nodeMgmtPagerPrev")?.addEventListener("click", () => {
+      nodeMgmtState.page = Math.max(1, nodeMgmtState.page - 1);
+      loadNodeMgmt();
+    });
+    document.getElementById("nodeMgmtPagerNext")?.addEventListener("click", () => {
+      nodeMgmtState.page += 1;
+      loadNodeMgmt();
+    });
+  } catch (err) {
+    container.innerHTML = `<p class="error">${err.message}</p>`;
+    pager.innerHTML = "";
+  }
+}
+
+let nodeMgmtSearchDebounce;
+document.getElementById("nodeMgmtSearchInput").addEventListener("input", (e) => {
+  clearTimeout(nodeMgmtSearchDebounce);
+  nodeMgmtSearchDebounce = setTimeout(() => {
+    nodeMgmtState.search = e.target.value;
+    nodeMgmtState.page = 1;
+    updateNodeMgmtHeader();
+    loadNodeMgmt();
+  }, 300);
+});
+
+async function deleteNodeEntry(entry) {
+  if (!confirm(`"${entry.nodeName}" (${entry.nodeId})를 삭제하시겠습니까?`)) return;
+  try {
+    await api("DELETE", `/api/nodes/${encodeURIComponent(entry.nodeId)}`);
+    await loadNodeMgmt();
+  } catch (err) {
+    alert(`삭제 실패: ${err.message}`);
+  }
+}
+
+// ---------- Node create/edit form ----------
+let nodeFormMode = "create"; // "create" | "edit"
+let nodeFormOriginalId = null;
+
+function renderNodeConfigFields(type, existingConfig) {
+  const fields = NODE_CONFIG_FIELDS[type];
+  const container = document.getElementById("nodeFieldConfig");
+  container.innerHTML = fields
+    .map((f) => {
+      const value = existingConfig && existingConfig[f.key] !== undefined ? existingConfig[f.key] : "";
+      return `<label>${f.label}
+        <input type="${f.type}" id="nodeCfg_${f.key}" data-key="${f.key}" value="${escapeHtml(String(value))}" ${f.required ? "required" : ""} placeholder="${escapeHtml(f.placeholder ?? "")}" />
+      </label>`;
+    })
+    .join("");
+}
+
+function openNodeForm(entry) {
+  const form = document.getElementById("nodeForm");
+  const title = document.getElementById("nodeFormTitle");
+  const errorEl = document.getElementById("nodeFormError");
+  errorEl.hidden = true;
+  const idInput = document.getElementById("nodeFieldId");
+  const nameInput = document.getElementById("nodeFieldName");
+  const typeSelect = document.getElementById("nodeFieldType");
+  const hostInput = document.getElementById("nodeFieldHost");
+
+  if (entry) {
+    nodeFormMode = "edit";
+    nodeFormOriginalId = entry.nodeId;
+    title.textContent = `노드 수정: ${entry.nodeId}`;
+    idInput.value = entry.nodeId;
+    idInput.disabled = true;
+    nameInput.value = entry.nodeName;
+    typeSelect.value = entry.nodeType;
+    typeSelect.disabled = true;
+    hostInput.value = entry.host;
+    renderNodeConfigFields(entry.nodeType, entry.config);
+  } else {
+    nodeFormMode = "create";
+    nodeFormOriginalId = null;
+    title.textContent = "새 노드 등록";
+    idInput.value = "";
+    idInput.disabled = false;
+    nameInput.value = "";
+    typeSelect.value = "ESB";
+    typeSelect.disabled = false;
+    hostInput.value = "";
+    renderNodeConfigFields("ESB", null);
+  }
+  form.hidden = false;
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeNodeForm() {
+  document.getElementById("nodeForm").hidden = true;
+}
+
+document.getElementById("nodeMgmtCreateBtn").addEventListener("click", () => openNodeForm(null));
+document.getElementById("nodeFormCloseBtn").addEventListener("click", closeNodeForm);
+document.getElementById("nodeFieldType").addEventListener("change", (e) => {
+  if (nodeFormMode === "create") renderNodeConfigFields(e.target.value, null);
+});
+
+document.getElementById("nodeFormEl").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById("nodeFormError");
+  errorEl.hidden = true;
+
+  const nodeId = document.getElementById("nodeFieldId").value.trim();
+  const nodeName = document.getElementById("nodeFieldName").value.trim();
+  const nodeType = document.getElementById("nodeFieldType").value;
+  const host = document.getElementById("nodeFieldHost").value.trim();
+  const config = {};
+  document.querySelectorAll("#nodeFieldConfig [data-key]").forEach((input) => {
+    if (input.value !== "") config[input.dataset.key] = input.value;
+  });
+
+  const submitBtn = document.getElementById("nodeFormSubmitBtn");
+  submitBtn.disabled = true;
+  try {
+    if (nodeFormMode === "create") {
+      await api("POST", "/api/nodes", { nodeId, nodeName, nodeType, host, config });
+    } else {
+      await api("PUT", `/api/nodes/${encodeURIComponent(nodeFormOriginalId)}`, {
+        nodeName,
+        nodeType,
+        host,
+        config,
+      });
+    }
+    closeNodeForm();
+    nodeMgmtState.type = nodeType;
+    nodeMgmtState.search = "";
+    document.getElementById("nodeMgmtSearchInput").value = "";
+    document.querySelectorAll(".nodemgmt-type-btn").forEach((b) => b.classList.toggle("active", b.dataset.nodemgmttype === nodeType));
+    updateNodeMgmtHeader();
+    await loadNodeMgmt();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.hidden = false;
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+// ---------- Dashboard ----------
+const NODE_TYPE_LABEL = { ESB: "ESB", AGENT: "AGENT", ADAPTER: "ADAPTER" };
+const NODE_STATUS_ORDER = ["정상", "경고", "장애", "알수없음"];
+
+function renderDashboardOverview(overview) {
+  const total = overview.totalNodes;
+  const statusCount = (status) => overview.byStatus.find((s) => s.status === status)?.count ?? 0;
+  const tileClass = { 정상: "success", 경고: "warn", 장애: "danger", 알수없음: "" };
+
+  const tiles = [
+    `<div class="stat-tile"><div class="stat-tile-label">전체 노드</div><div class="stat-tile-value">${total}</div></div>`,
+    ...NODE_STATUS_ORDER.map(
+      (status) =>
+        `<div class="stat-tile"><div class="stat-tile-label">${status}</div><div class="stat-tile-value ${tileClass[status]}">${statusCount(status)}</div></div>`,
+    ),
+  ].join("");
+  document.getElementById("dashboardStatTiles").innerHTML = tiles;
+
+  const typeRows = overview.byType
+    .map((t) => `<tr><td>${NODE_TYPE_LABEL[t.nodeType] ?? t.nodeType}</td><td>${t.count}</td></tr>`)
+    .join("");
+  document.getElementById("dashboardTypeTable").innerHTML = overview.byType.length
+    ? `<table><thead><tr><th>타입</th><th>노드 수</th></tr></thead><tbody>${typeRows}</tbody></table>`
+    : '<p class="hint">등록된 노드가 없습니다.</p>';
+}
+
+function renderResourceUsage(rows) {
+  const container = document.getElementById("dashboardResourceUsage");
+  if (rows.length === 0) {
+    container.innerHTML = '<p class="hint">등록된 노드가 없습니다.</p>';
+    return;
+  }
+  container.innerHTML = rows
+    .map((r) => {
+      const metrics = [
+        ["CPU", r.cpuPct],
+        ["MEM", r.memPct],
+        ["DISK", r.diskPct],
+      ]
+        .map(
+          ([label, pct]) => `
+        <div class="hbar-row">
+          <div class="hbar-label">${label}</div>
+          <div class="hbar-track"><div class="${resourceBarClass(pct)}" style="width:${pct ?? 0}%"></div></div>
+          <div class="hbar-value">${formatPct(pct)}</div>
+        </div>`,
+        )
+        .join("");
+      return `
+      <div class="resource-node-card">
+        <div class="resource-node-header">
+          <span class="tag connector-type-badge">${escapeHtml(r.nodeType)}</span>
+          <strong>${escapeHtml(r.nodeName)}</strong>
+          ${nodeStatusTag(r.status)}
+        </div>
+        ${metrics}
+      </div>`;
+    })
+    .join("");
+}
+
+function renderDashboardToday(daily) {
+  const today = daily.series[daily.series.length - 1] ?? { count: 0, success: 0, failed: 0 };
+  const failureRatePct = today.count > 0 ? Math.round((today.failed / today.count) * 1000) / 10 : 0;
+  document.getElementById("dashboardTodayTiles").innerHTML = `
+    <div class="stat-tile"><div class="stat-tile-label">오늘 전체 처리</div><div class="stat-tile-value">${today.count}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">성공</div><div class="stat-tile-value success">${today.success}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">실패</div><div class="stat-tile-value danger">${today.failed}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">실패율</div><div class="stat-tile-value ${failureRatePct > 0 ? "warn" : ""}">${failureRatePct}%</div></div>
+  `;
+  const successPct = today.count > 0 ? Math.round((today.success / today.count) * 100) : 0;
+  const failedPct = 100 - successPct;
+  document.getElementById("dashboardTodayBar").innerHTML = `
+    <div class="hbar-row">
+      <div class="hbar-label">오늘</div>
+      <div class="hbar-track">
+        <div class="hbar-stack" style="width:100%">
+          <div class="seg seg-success" style="width:${successPct}%"></div>
+          ${today.failed > 0 ? `<div class="seg-gap-v"></div><div class="seg seg-failed" style="width:${failedPct}%"></div>` : ""}
+        </div>
+      </div>
+      <div class="hbar-value">${today.count}건 (실패 ${today.failed})</div>
+    </div>
+  `;
+}
+
+async function loadDashboard() {
+  try {
+    const [overview, resourceUsage, daily] = await Promise.all([
+      api("GET", "/api/dashboard/overview"),
+      api("GET", "/api/dashboard/resource-usage"),
+      api("GET", "/api/stats/daily?days=1"),
+    ]);
+    renderDashboardOverview(overview);
+    renderResourceUsage(resourceUsage);
+    renderDashboardToday(daily);
+  } catch (err) {
+    document.getElementById("dashboardStatTiles").innerHTML = `<p class="error">${err.message}</p>`;
+  }
+}
+document.getElementById("dashboardRefreshBtn").addEventListener("click", loadDashboard);
 
 // ---------- Stats / charts ----------
 const CONNECTOR_TYPE_LABEL = { QUEUE: "큐", HTTP: "HTTP", DB: "DB", FILE: "FILE", UNKNOWN: "미등록" };

@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import type { ConnectorConfig, ConnectorType } from "../src/monitoring/connectorTypes.js";
 import { upsertInterface } from "../src/monitoring/interfaceRegistry.js";
 import { recordRun } from "../src/monitoring/logStore.js";
+import { recordHeartbeat } from "../src/monitoring/nodeMonitoring.js";
+import { upsertNode } from "../src/monitoring/nodeRegistry.js";
+import type { NodeConfig, NodeStatus, NodeType } from "../src/monitoring/nodeTypes.js";
 import { upsertResource } from "../src/monitoring/resourceRegistry.js";
 import type { ResourceConfig, ResourceType } from "../src/monitoring/resourceTypes.js";
 import type { RunRecord } from "../src/monitoring/types.js";
@@ -110,6 +113,72 @@ const RESOURCES: ResourceDef[] = [
   },
 ];
 
+interface NodeDef {
+  nodeId: string;
+  nodeName: string;
+  nodeType: NodeType;
+  host: string;
+  config: NodeConfig;
+  profile: "정상" | "경고" | "장애"; // 하트비트 더미 데이터를 이 상태에 맞는 자원 사용률 범위로 생성
+}
+
+const NODES: NodeDef[] = [
+  {
+    nodeId: "ESB-01",
+    nodeName: "ESB 엔진 #1 (서울)",
+    nodeType: "ESB",
+    host: "10.30.1.11",
+    config: { port: 8080, version: "3.2.1" },
+    profile: "정상",
+  },
+  {
+    nodeId: "ESB-02",
+    nodeName: "ESB 엔진 #2 (부산, 대기)",
+    nodeType: "ESB",
+    host: "10.30.1.12",
+    config: { port: 8080, version: "3.2.1" },
+    profile: "정상",
+  },
+  {
+    nodeId: "AGENT-ERP",
+    nodeName: "ERP 연계 에이전트",
+    nodeType: "AGENT",
+    host: "10.30.2.21",
+    config: { targetSystem: "ERP", version: "1.4.0" },
+    profile: "정상",
+  },
+  {
+    nodeId: "AGENT-MALL",
+    nodeName: "쇼핑몰 연계 에이전트",
+    nodeType: "AGENT",
+    host: "10.30.2.22",
+    config: { targetSystem: "쇼핑몰", version: "1.4.0" },
+    profile: "장애",
+  },
+  {
+    nodeId: "ADAPTER-DB",
+    nodeName: "DB 어댑터",
+    nodeType: "ADAPTER",
+    host: "10.30.3.31",
+    config: { adapterKind: "DB_ADAPTER", version: "2.0.3" },
+    profile: "경고",
+  },
+  {
+    nodeId: "ADAPTER-FILE",
+    nodeName: "FILE 어댑터",
+    nodeType: "ADAPTER",
+    host: "10.30.3.32",
+    config: { adapterKind: "FILE_ADAPTER", version: "2.0.3" },
+    profile: "정상",
+  },
+];
+
+const RESOURCE_RANGE: Record<"정상" | "경고" | "장애", { cpu: [number, number]; mem: [number, number]; disk: [number, number] }> = {
+  정상: { cpu: [15, 45], mem: [30, 60], disk: [40, 70] },
+  경고: { cpu: [70, 88], mem: [65, 85], disk: [75, 90] },
+  장애: { cpu: [90, 99], mem: [90, 99], disk: [85, 97] },
+};
+
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -163,6 +232,31 @@ async function seed() {
     await upsertResource(resource);
   }
 
+  let heartbeatCount = 0;
+  const HEARTBEAT_POINTS = 24; // 최근 2시간, 5분 간격
+  for (const node of NODES) {
+    await upsertNode({
+      nodeId: node.nodeId,
+      nodeName: node.nodeName,
+      nodeType: node.nodeType,
+      host: node.host,
+      config: node.config,
+    });
+    const range = RESOURCE_RANGE[node.profile];
+    for (let i = HEARTBEAT_POINTS - 1; i >= 0; i--) {
+      await recordHeartbeat({
+        nodeId: node.nodeId,
+        reportedAt: new Date(Date.now() - i * 5 * 60_000).toISOString(),
+        status: node.profile,
+        cpuPct: randomInt(range.cpu[0], range.cpu[1]),
+        memPct: randomInt(range.mem[0], range.mem[1]),
+        diskPct: randomInt(range.disk[0], range.disk[1]),
+        uptimeSec: randomInt(3600, 2_000_000),
+      });
+      heartbeatCount++;
+    }
+  }
+
   for (let daysAgo = 6; daysAgo >= 0; daysAgo--) {
     for (const iface of INTERFACES) {
       const runsToday = randomInt(4, 9);
@@ -203,6 +297,9 @@ async function seed() {
     `인터페이스 ${INTERFACES.length}개 등록(${INTERFACES.map((i) => i.connectorType).join("/")}) + 더미 트랜잭션 ${count}건을 삽입했습니다 (최근 7일).`,
   );
   console.log(`공통 리소스 ${RESOURCES.length}개 등록(${RESOURCES.map((r) => r.resourceType).join("/")}).`);
+  console.log(
+    `노드 ${NODES.length}개 등록(${NODES.map((n) => `${n.nodeId}:${n.profile}`).join(", ")}) + 하트비트 ${heartbeatCount}건을 삽입했습니다.`,
+  );
   for (const [name, stats] of perInterfaceCounts) {
     console.log(`  - ${name}: ${stats.runs}건 실행, 실패/부분실패 ${stats.problems}건`);
   }

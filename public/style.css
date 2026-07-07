@@ -291,6 +291,33 @@ th { color: var(--muted); font-weight: 500; }
   text-align: right;
 }
 
+.hbar-fill-ok { background: var(--success); }
+.hbar-fill-warn { background: #d97706; }
+.hbar-fill-danger { background: var(--danger); }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.stat-tile {
+  background: var(--mono-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.stat-tile-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; }
+.stat-tile-value { font-size: 1.4rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat-tile-value.success { color: var(--success); }
+.stat-tile-value.danger { color: var(--danger); }
+.stat-tile-value.warn { color: #d97706; }
+
+.resource-node-card { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.resource-node-card:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.resource-node-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.85rem; flex-wrap: wrap; }
+.resource-node-host { color: var(--muted); font-size: 0.75rem; }
+
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; }
 
 tbody tr[data-transaction-id] { cursor: pointer; }

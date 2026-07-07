@@ -17,6 +17,8 @@
     <button class="tab-btn" data-tab="stats">통계</button>
     <button class="tab-btn" data-tab="interfaces">인터페이스 관리</button>
     <button class="tab-btn" data-tab="resources">공통 리소스</button>
+    <button class="tab-btn" data-tab="nodes">어댑터/에이전트/ESB</button>
+    <button class="tab-btn" data-tab="dashboard">대시보드</button>
     <button class="tab-btn" data-tab="chat">챗봇</button>
   </nav>
 
@@ -221,6 +223,86 @@
             <button type="submit" id="resFormSubmitBtn">저장</button>
           </div>
         </form>
+      </div>
+    </section>
+
+    <section id="tab-nodes" class="tab-panel">
+      <div class="card">
+        <h2>노드 통합 검색</h2>
+        <p class="hint">아래 소메뉴에서 어떤 타입을 보고 있든 상관없이, 검색어를 입력하면 ESB/AGENT/ADAPTER 전체에서 노드 ID/이름/호스트를 찾습니다.</p>
+        <input type="text" id="nodeMgmtSearchInput" placeholder="노드 ID/이름/호스트로 검색 (모든 타입 대상)" class="search-input" />
+      </div>
+
+      <nav class="subtabs">
+        <button class="subtab-btn nodemgmt-type-btn active" data-nodemgmttype="ESB">ESB</button>
+        <button class="subtab-btn nodemgmt-type-btn" data-nodemgmttype="AGENT">AGENT</button>
+        <button class="subtab-btn nodemgmt-type-btn" data-nodemgmttype="ADAPTER">ADAPTER</button>
+      </nav>
+      <div class="card">
+        <div class="row-between">
+          <h2 id="nodeMgmtTitle">ESB 노드 관리</h2>
+          <button id="nodeMgmtCreateBtn">+ 새 노드 등록</button>
+        </div>
+        <p class="hint" id="nodeMgmtHint"></p>
+        <div id="nodeMgmtTable"></div>
+        <div id="nodeMgmtPager" class="pager"></div>
+      </div>
+
+      <div class="card" id="nodeForm" hidden>
+        <div class="row-between">
+          <h2 id="nodeFormTitle">새 노드 등록</h2>
+          <button class="secondary" id="nodeFormCloseBtn">닫기</button>
+        </div>
+        <form id="nodeFormEl" class="if-form">
+          <label>노드 ID
+            <input type="text" id="nodeFieldId" required />
+          </label>
+          <label>노드 이름
+            <input type="text" id="nodeFieldName" required />
+          </label>
+          <label>노드 타입
+            <select id="nodeFieldType">
+              <option value="ESB">ESB</option>
+              <option value="AGENT">AGENT</option>
+              <option value="ADAPTER">ADAPTER</option>
+            </select>
+          </label>
+          <label>호스트
+            <input type="text" id="nodeFieldHost" required />
+          </label>
+          <div id="nodeFieldConfig"></div>
+          <p class="hint">상태/자원 사용률은 노드가 주기적으로 보고하는 하트비트 값으로, 이 화면에서 직접 입력하지 않습니다.</p>
+          <p class="error" id="nodeFormError" hidden></p>
+          <div class="row-between">
+            <span></span>
+            <button type="submit" id="nodeFormSubmitBtn">저장</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section id="tab-dashboard" class="tab-panel">
+      <div class="card">
+        <div class="row-between">
+          <h2>노드 상태 요약</h2>
+          <button id="dashboardRefreshBtn">새로고침</button>
+        </div>
+        <p class="hint">어댑터/에이전트/ESB 노드의 최신 하트비트 기준 상태입니다.</p>
+        <div id="dashboardStatTiles" class="stat-grid"></div>
+        <div id="dashboardTypeTable"></div>
+      </div>
+
+      <div class="card">
+        <h2>노드별 자원 사용률</h2>
+        <p class="hint">각 노드가 마지막으로 보고한 CPU/메모리/디스크 사용률입니다.</p>
+        <div id="dashboardResourceUsage"></div>
+      </div>
+
+      <div class="card">
+        <h2>오늘 연계 처리 현황</h2>
+        <p class="hint">오늘 하루 전체 인터페이스의 처리 건수/성공/실패 현황입니다.</p>
+        <div id="dashboardTodayTiles" class="stat-grid"></div>
+        <div id="dashboardTodayBar"></div>
       </div>
     </section>
 

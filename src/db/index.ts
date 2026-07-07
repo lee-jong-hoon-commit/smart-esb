@@ -41,6 +41,28 @@ db.exec(`
     config_json TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS nodes (
+    node_id TEXT PRIMARY KEY,
+    node_name TEXT NOT NULL,
+    node_type TEXT NOT NULL,
+    host TEXT NOT NULL,
+    config_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS node_heartbeats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id TEXT NOT NULL,
+    reported_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    cpu_pct REAL NOT NULL,
+    mem_pct REAL NOT NULL,
+    disk_pct REAL NOT NULL,
+    uptime_sec INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_node_heartbeats_node ON node_heartbeats (node_id, reported_at);
 `);
 
 // CREATE TABLE IF NOT EXISTS는 이미 존재하는 테이블에 새 컬럼을 추가해주지 않으므로,

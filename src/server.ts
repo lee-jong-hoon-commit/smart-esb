@@ -4,8 +4,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chatRouter } from "./routes/chat.js";
 import { connectorsRouter } from "./routes/connectors.js";
+import { dashboardRouter } from "./routes/dashboard.js";
 import { interfacesRouter } from "./routes/interfaces.js";
 import { monitoringRouter } from "./routes/monitoring.js";
+import { nodesRouter } from "./routes/nodes.js";
 import { resourcesRouter } from "./routes/resources.js";
 import { statsRouter } from "./routes/stats.js";
 
@@ -26,6 +28,8 @@ export function createServer() {
   app.use("/api/connectors", connectorsRouter);
   app.use("/api/interfaces", interfacesRouter);
   app.use("/api/resources", resourcesRouter);
+  app.use("/api/nodes", nodesRouter);
+  app.use("/api/dashboard", dashboardRouter);
   app.use("/api/stats", statsRouter);
 
   app.use(express.static(publicDir));
