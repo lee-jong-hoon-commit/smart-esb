@@ -57,9 +57,10 @@ export interface InterfaceRegistryPage {
 }
 
 // 커넥터 타입별로 인터페이스가 수천~수만 개로 늘어날 수 있으므로, 전체를 내려주지 않고
-// SQL 단에서 타입 필터 + 이름 검색(LIKE) + 페이지네이션(LIMIT/OFFSET)을 적용합니다.
+// SQL 단에서 타입 필터(선택) + 이름 검색(LIKE) + 페이지네이션(LIMIT/OFFSET)을 적용합니다.
+// connectorType을 생략하면 모든 타입을 대상으로 검색합니다 (커넥터 모니터링의 "전체" 탭용).
 export async function listInterfacesPage(
-  connectorType: ConnectorType,
+  connectorType: ConnectorType | undefined,
   page = 1,
   pageSize = 20,
   search?: string,
@@ -68,14 +69,23 @@ export async function listInterfacesPage(
   const offset = (safePage - 1) * pageSize;
   const searchFilter = search?.trim() ? `%${search.trim()}%` : null;
 
-  const whereClause = searchFilter ? "connector_type = ? AND interface_name LIKE ?" : "connector_type = ?";
-  const params: (string | number)[] = searchFilter ? [connectorType, searchFilter] : [connectorType];
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+  if (connectorType) {
+    conditions.push("connector_type = ?");
+    params.push(connectorType);
+  }
+  if (searchFilter) {
+    conditions.push("interface_name LIKE ?");
+    params.push(searchFilter);
+  }
+  const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  const totalRow = db.prepare(`SELECT COUNT(*) as total FROM interfaces WHERE ${whereClause}`).get(...params) as {
+  const totalRow = db.prepare(`SELECT COUNT(*) as total FROM interfaces ${whereClause}`).get(...params) as {
     total: number;
   };
   const rows = db
-    .prepare(`SELECT * FROM interfaces WHERE ${whereClause} ORDER BY interface_name ASC LIMIT ? OFFSET ?`)
+    .prepare(`SELECT * FROM interfaces ${whereClause} ORDER BY interface_name ASC LIMIT ? OFFSET ?`)
     .all(...params, pageSize, offset) as InterfaceRow[];
 
   return {

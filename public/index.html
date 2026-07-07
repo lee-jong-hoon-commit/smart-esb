@@ -41,14 +41,15 @@
 
     <section id="tab-connectors" class="tab-panel">
       <nav class="subtabs">
-        <button class="subtab-btn conntype-btn active" data-conntype="HTTP">HTTP</button>
+        <button class="subtab-btn conntype-btn active" data-conntype="">전체</button>
+        <button class="subtab-btn conntype-btn" data-conntype="HTTP">HTTP</button>
         <button class="subtab-btn conntype-btn" data-conntype="QUEUE">QUEUE</button>
         <button class="subtab-btn conntype-btn" data-conntype="DB">DB</button>
         <button class="subtab-btn conntype-btn" data-conntype="FILE">FILE</button>
       </nav>
       <div class="card">
         <div class="row-between">
-          <h2 id="connectorsTitle">HTTP 커넥터 모니터링</h2>
+          <h2 id="connectorsTitle">전체 커넥터 모니터링</h2>
           <button id="connectorsRefreshBtn">새로고침</button>
         </div>
         <p class="hint" id="connectorsHint"></p>

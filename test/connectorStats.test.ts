@@ -188,4 +188,26 @@ describe("getConnectorStatsPage", () => {
     const searched = await getConnectorStatsPage("FILE", 1, 20, "페이지 테스트 7");
     expect(searched.rows.some((r) => r.interfaceName.includes("페이지 테스트 7"))).toBe(true);
   });
+
+  it("searches across all connector types when connectorType is omitted", async () => {
+    const marker = randomUUID();
+    const httpId = `IF-http-${randomUUID()}`;
+    const queueId = `IF-queue-${randomUUID()}`;
+    await upsertInterface({
+      interfaceId: httpId,
+      interfaceName: `전체검색 HTTP ${marker}`,
+      connectorType: "HTTP",
+      config: { url: "http://example.com", method: "GET", serviceIp: "10.0.0.1" },
+    });
+    await upsertInterface({
+      interfaceId: queueId,
+      interfaceName: `전체검색 QUEUE ${marker}`,
+      connectorType: "QUEUE",
+      config: { source: "A", destination: "B", queueName: "q" },
+    });
+
+    const page = await getConnectorStatsPage(undefined, 1, 20, marker);
+    const foundTypes = page.rows.map((r) => r.connectorType).sort();
+    expect(foundTypes).toEqual(["HTTP", "QUEUE"]);
+  });
 });

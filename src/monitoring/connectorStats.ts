@@ -177,7 +177,7 @@ function buildStats(iface: InterfaceRegistryEntry): ConnectorStats {
 }
 
 export async function getConnectorStatsPage(
-  connectorType: ConnectorType,
+  connectorType: ConnectorType | undefined,
   page = 1,
   pageSize = 20,
   search?: string,

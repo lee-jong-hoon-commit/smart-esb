@@ -249,6 +249,7 @@ function connectorTypeFields(c) {
 }
 
 const CONNTYPE_META = {
+  "": { title: "전체 커넥터 모니터링", hint: "인터페이스 이름으로 검색하면 커넥터 타입에 상관없이 전체에서 찾습니다." },
   HTTP: { title: "HTTP 커넥터 모니터링", hint: "오늘 호출 건수/성공/실패, 서비스 IP, 평균/최소/최대 소요시간, 느린 호출 비율을 확인합니다." },
   QUEUE: { title: "QUEUE 커넥터 모니터링", hint: "큐 경로(출발 → 도착), 적체 건수, 최고 적체 시간, 처리 상태를 확인합니다." },
   DB: { title: "DB 커넥터 모니터링", hint: "폴링 주기 대비 마지막 실행 시각을 기준으로 지연 여부를 확인합니다." },
@@ -256,7 +257,7 @@ const CONNTYPE_META = {
 };
 
 const connState = {
-  type: "HTTP",
+  type: "",
   page: 1,
   pageSize: 20,
   search: "",
@@ -286,10 +287,10 @@ async function loadConnectors() {
   container.innerHTML = '<p class="hint">불러오는 중…</p>';
   try {
     const params = new URLSearchParams({
-      type: connState.type,
       page: String(connState.page),
       pageSize: String(connState.pageSize),
     });
+    if (connState.type) params.set("type", connState.type);
     if (connState.search) params.set("search", connState.search);
     const result = await api("GET", `/api/connectors?${params}`);
     if (result.rows.length === 0) {

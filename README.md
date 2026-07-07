@@ -30,8 +30,10 @@ npm run dev         # http://localhost:4000
 ## 커넥터 모니터링 화면
 
 인터페이스가 커넥터 타입별로 수천~수만 개로 늘어날 수 있다는 전제로, 통계 화면과 동일하게
-**서브메뉴 4개(HTTP / QUEUE / DB / FILE)**로 나누어져 있고, 각 서브메뉴는 검색(이름 LIKE) +
-페이지네이션(`LIMIT`/`OFFSET`)으로 필요한 만큼만 불러옵니다. 타입별로 다른 정보를 보여줍니다:
+**서브메뉴 5개(전체 / HTTP / QUEUE / DB / FILE)**로 나누어져 있고, 각 서브메뉴는 검색(이름 LIKE) +
+페이지네이션(`LIMIT`/`OFFSET`)으로 필요한 만큼만 불러옵니다. **전체** 탭은 커넥터 타입에 상관없이
+모든 인터페이스를 대상으로 이름 검색을 하며(카드마다 실제 타입에 맞는 필드가 표시됨), 특정 타입만
+보고 싶을 때는 HTTP/QUEUE/DB/FILE 탭으로 좁혀서 볼 수 있습니다. 타입별로 다른 정보를 보여줍니다:
 
 - **QUEUE**: 출발지 → 도착지, 큐 이름, 상태(정상/지연), 적체 건수, 최고 적체 시간(가장 오래
   쌓여있는 실패 레코드의 경과 시간). 적체 건수는 "오늘 실패해서 아직 재전송되지 않은 레코드 수"로
@@ -79,7 +81,7 @@ AI를 전혀 호출하지 않으므로 항상 같은 입력에는 같은 답이 
 | GET | `/api/monitoring/runs/:transactionId` | 트랜잭션 상세 (레코드별 payload/상태/에러 포함) |
 | POST | `/api/monitoring/runs/:transactionId/records/:recordId/resend` | 실패한 레코드 재전송 (결과/건수/에러내용 재계산) |
 | GET | `/api/monitoring/summary?from=&to=` | 기간별 인터페이스 성공/부분실패/실패 집계 |
-| GET | `/api/connectors?type=&page=&pageSize=&search=` | 커넥터 타입별(QUEUE/HTTP/DB/FILE) 인터페이스 목록 + 오늘 처리 현황 (페이지네이션 + 검색) |
+| GET | `/api/connectors?type=&page=&pageSize=&search=` | 인터페이스 목록 + 오늘 처리 현황 (페이지네이션 + 검색). `type` 생략 시 QUEUE/HTTP/DB/FILE 전체 대상 |
 | GET | `/api/stats/daily?days=` | 일자별 처리 건수 (31일 초과 시 자동 주간 집계) |
 | GET | `/api/stats/by-type?days=` | 커넥터 타입별 처리 건수 |
 | GET | `/api/stats/by-interface?days=&page=&pageSize=&search=` | 인터페이스별 처리 건수 (페이지네이션 + 검색) |
