@@ -277,14 +277,23 @@ function updateConnectorsHeader() {
   }
 }
 
+// 검색 중일 때는 결과에 실제로 포함된 커넥터 타입의 소메뉴만 색칠하고,
+// 검색어가 없을 때는 현재 선택된 소메뉴 하나만 색칠합니다.
+function updateConntypeHighlight(resultTypes) {
+  document.querySelectorAll(".conntype-btn").forEach((b) => {
+    const isActive = connState.search ? resultTypes.has(b.dataset.conntype) : b.dataset.conntype === connState.type;
+    b.classList.toggle("active", isActive);
+  });
+}
+
 document.querySelectorAll(".conntype-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".conntype-btn").forEach((b) => b.classList.toggle("active", b === btn));
     connState.type = btn.dataset.conntype;
     connState.page = 1;
     connState.search = "";
     document.getElementById("connectorsSearchInput").value = "";
     updateConnectorsHeader();
+    updateConntypeHighlight(new Set());
     loadConnectors();
   });
 });
@@ -305,6 +314,7 @@ async function loadConnectors() {
       params.set("type", connState.type);
     }
     const result = await api("GET", `/api/connectors?${params}`);
+    updateConntypeHighlight(new Set(result.rows.map((r) => r.connectorType)));
     if (result.rows.length === 0) {
       container.innerHTML = '<p class="hint">등록된 인터페이스가 없습니다.</p>';
       pager.innerHTML = "";
