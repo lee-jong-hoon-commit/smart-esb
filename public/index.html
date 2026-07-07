@@ -15,6 +15,7 @@
     <button class="tab-btn active" data-tab="monitoring">모니터링</button>
     <button class="tab-btn" data-tab="connectors">커넥터 모니터링</button>
     <button class="tab-btn" data-tab="stats">통계</button>
+    <button class="tab-btn" data-tab="interfaces">인터페이스 관리</button>
     <button class="tab-btn" data-tab="chat">챗봇</button>
   </nav>
 
@@ -116,6 +117,59 @@
           <div id="interfaceTable"></div>
           <div id="interfacePager" class="pager"></div>
         </div>
+      </div>
+    </section>
+
+    <section id="tab-interfaces" class="tab-panel">
+      <div class="card">
+        <h2>인터페이스 통합 검색</h2>
+        <p class="hint">아래 소메뉴에서 어떤 타입을 보고 있든 상관없이, 검색어를 입력하면 HTTP/QUEUE/DB/FILE 전체에서 인터페이스 ID/이름을 찾습니다.</p>
+        <input type="text" id="ifMgmtSearchInput" placeholder="인터페이스 ID 또는 이름으로 검색 (모든 타입 대상)" class="search-input" />
+      </div>
+
+      <nav class="subtabs">
+        <button class="subtab-btn ifmgmt-type-btn active" data-ifmgmttype="HTTP">HTTP</button>
+        <button class="subtab-btn ifmgmt-type-btn" data-ifmgmttype="QUEUE">QUEUE</button>
+        <button class="subtab-btn ifmgmt-type-btn" data-ifmgmttype="DB">DB</button>
+        <button class="subtab-btn ifmgmt-type-btn" data-ifmgmttype="FILE">FILE</button>
+      </nav>
+      <div class="card">
+        <div class="row-between">
+          <h2 id="ifMgmtTitle">HTTP 인터페이스 관리</h2>
+          <button id="ifMgmtCreateBtn">+ 새 인터페이스 등록</button>
+        </div>
+        <p class="hint" id="ifMgmtHint"></p>
+        <div id="ifMgmtTable"></div>
+        <div id="ifMgmtPager" class="pager"></div>
+      </div>
+
+      <div class="card" id="ifForm" hidden>
+        <div class="row-between">
+          <h2 id="ifFormTitle">새 인터페이스 등록</h2>
+          <button class="secondary" id="ifFormCloseBtn">닫기</button>
+        </div>
+        <form id="ifFormEl" class="if-form">
+          <label>인터페이스 ID
+            <input type="text" id="ifFieldId" required />
+          </label>
+          <label>인터페이스 이름
+            <input type="text" id="ifFieldName" required />
+          </label>
+          <label>커넥터 타입
+            <select id="ifFieldType">
+              <option value="HTTP">HTTP</option>
+              <option value="QUEUE">QUEUE</option>
+              <option value="DB">DB</option>
+              <option value="FILE">FILE</option>
+            </select>
+          </label>
+          <div id="ifFieldConfig"></div>
+          <p class="error" id="ifFormError" hidden></p>
+          <div class="row-between">
+            <span></span>
+            <button type="submit" id="ifFormSubmitBtn">저장</button>
+          </div>
+        </form>
       </div>
     </section>
 

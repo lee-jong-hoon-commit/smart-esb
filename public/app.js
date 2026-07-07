@@ -38,6 +38,7 @@ function activateTab(tab) {
   document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
   if (tab === "connectors") loadConnectors();
   if (tab === "stats") loadDailyStats();
+  if (tab === "interfaces") loadIfMgmt();
 }
 
 // ---------- Monitoring ----------
@@ -373,6 +374,281 @@ document.getElementById("connectorsSearchInput").addEventListener("input", (e) =
   }, 300);
 });
 
+// ---------- Interface management ----------
+const IFMGMT_TYPE_META = {
+  HTTP: { title: "HTTP 인터페이스 관리", hint: "HTTP 커넥터 인터페이스를 등록/수정/삭제합니다." },
+  QUEUE: { title: "QUEUE 인터페이스 관리", hint: "QUEUE 커넥터 인터페이스를 등록/수정/삭제합니다." },
+  DB: { title: "DB 인터페이스 관리", hint: "DB 커넥터 인터페이스를 등록/수정/삭제합니다." },
+  FILE: { title: "FILE 인터페이스 관리", hint: "FILE 커넥터 인터페이스를 등록/수정/삭제합니다." },
+};
+
+const IFMGMT_CONFIG_FIELDS = {
+  HTTP: [
+    { key: "url", label: "호출 주소(URL)", type: "text", required: true },
+    { key: "method", label: "메서드", type: "text", required: true, placeholder: "GET, POST 등" },
+    { key: "serviceIp", label: "서비스 IP", type: "text", required: true },
+    { key: "timeoutMs", label: "타임아웃(ms)", type: "number", required: false },
+  ],
+  QUEUE: [
+    { key: "source", label: "출발지", type: "text", required: true },
+    { key: "destination", label: "도착지", type: "text", required: true },
+    { key: "queueName", label: "큐 이름", type: "text", required: true },
+  ],
+  DB: [
+    { key: "table", label: "테이블명", type: "text", required: true },
+    { key: "watermarkColumn", label: "워터마크 컬럼", type: "text", required: true },
+    { key: "pollIntervalSec", label: "폴링 주기(초)", type: "number", required: false },
+  ],
+  FILE: [
+    { key: "path", label: "파일 경로", type: "text", required: true },
+    { key: "pollIntervalSec", label: "폴링 주기(초)", type: "number", required: false },
+  ],
+};
+
+function ifConfigSummary(entry) {
+  const c = entry.config;
+  if (entry.connectorType === "HTTP") return `${escapeHtml(c.method)} ${escapeHtml(c.url)} / IP ${escapeHtml(c.serviceIp)}${c.timeoutMs ? ` / 타임아웃 ${c.timeoutMs}ms` : ""}`;
+  if (entry.connectorType === "QUEUE") return `${escapeHtml(c.source)} → ${escapeHtml(c.destination)} (큐: ${escapeHtml(c.queueName)})`;
+  if (entry.connectorType === "DB") return `테이블 ${escapeHtml(c.table)} / 워터마크 ${escapeHtml(c.watermarkColumn)}${c.pollIntervalSec ? ` / 폴링 ${c.pollIntervalSec}초` : ""}`;
+  return `경로 ${escapeHtml(c.path)}${c.pollIntervalSec ? ` / 폴링 ${c.pollIntervalSec}초` : ""}`;
+}
+
+const ifMgmtState = {
+  type: "HTTP",
+  page: 1,
+  pageSize: 20,
+  search: "",
+};
+
+function updateIfMgmtHeader() {
+  const title = document.getElementById("ifMgmtTitle");
+  const hint = document.getElementById("ifMgmtHint");
+  if (ifMgmtState.search) {
+    title.textContent = "인터페이스 검색 결과 (전체 타입)";
+    hint.textContent = "검색어가 있는 동안은 선택한 소메뉴와 상관없이 모든 커넥터 타입에서 찾습니다.";
+  } else {
+    const meta = IFMGMT_TYPE_META[ifMgmtState.type];
+    title.textContent = meta.title;
+    hint.textContent = meta.hint;
+  }
+}
+
+function updateIfMgmtHighlight(resultTypes) {
+  document.querySelectorAll(".ifmgmt-type-btn").forEach((b) => {
+    const isActive = ifMgmtState.search ? resultTypes.has(b.dataset.ifmgmttype) : b.dataset.ifmgmttype === ifMgmtState.type;
+    b.classList.toggle("active", isActive);
+  });
+}
+
+document.querySelectorAll(".ifmgmt-type-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    ifMgmtState.type = btn.dataset.ifmgmttype;
+    ifMgmtState.page = 1;
+    ifMgmtState.search = "";
+    document.getElementById("ifMgmtSearchInput").value = "";
+    updateIfMgmtHeader();
+    updateIfMgmtHighlight(new Set());
+    loadIfMgmt();
+  });
+});
+updateIfMgmtHeader();
+
+async function loadIfMgmt() {
+  const container = document.getElementById("ifMgmtTable");
+  const pager = document.getElementById("ifMgmtPager");
+  container.innerHTML = '<p class="hint">불러오는 중…</p>';
+  try {
+    const params = new URLSearchParams({
+      page: String(ifMgmtState.page),
+      pageSize: String(ifMgmtState.pageSize),
+    });
+    if (ifMgmtState.search) {
+      params.set("search", ifMgmtState.search);
+    } else {
+      params.set("type", ifMgmtState.type);
+    }
+    const result = await api("GET", `/api/interfaces?${params}`);
+    updateIfMgmtHighlight(new Set(result.rows.map((r) => r.connectorType)));
+    if (result.rows.length === 0) {
+      container.innerHTML = '<p class="hint">등록된 인터페이스가 없습니다.</p>';
+      pager.innerHTML = "";
+      return;
+    }
+    const rows = result.rows
+      .map(
+        (entry) => `
+      <tr data-interface-id="${escapeHtml(entry.interfaceId)}">
+        <td class="mono cell-ellipsis" title="${escapeHtml(entry.interfaceId)}">${escapeHtml(entry.interfaceId)}</td>
+        <td class="cell-ellipsis" title="${escapeHtml(entry.interfaceName)}">${escapeHtml(entry.interfaceName)}</td>
+        <td><span class="tag connector-type-badge">${escapeHtml(entry.connectorType)}</span></td>
+        <td class="cell-ellipsis" title="${ifConfigSummary(entry)}">${ifConfigSummary(entry)}</td>
+        <td class="if-row-actions">
+          <button class="secondary if-edit-btn">수정</button>
+          <button class="secondary if-delete-btn">삭제</button>
+        </td>
+      </tr>`,
+      )
+      .join("");
+    container.innerHTML = `
+      <div class="table-scroll">
+        <table class="mon-table">
+          <colgroup>
+            <col style="width: 20%" /><col style="width: 22%" /><col style="width: 10%" /><col style="width: 33%" /><col style="width: 15%" />
+          </colgroup>
+          <thead>
+            <tr><th>인터페이스ID</th><th>이름</th><th>타입</th><th>설정 요약</th><th>작업</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+    container.querySelectorAll("tbody tr").forEach((tr) => {
+      const entry = result.rows.find((r) => r.interfaceId === tr.dataset.interfaceId);
+      tr.querySelector(".if-edit-btn").addEventListener("click", () => openIfForm(entry));
+      tr.querySelector(".if-delete-btn").addEventListener("click", () => deleteIfEntry(entry));
+    });
+
+    pager.innerHTML = `
+      <button class="secondary" id="ifMgmtPagerPrev" ${result.page <= 1 ? "disabled" : ""}>이전</button>
+      <span class="hint">페이지 ${result.page} / ${result.totalPages} (총 ${result.total}개 인터페이스)</span>
+      <button class="secondary" id="ifMgmtPagerNext" ${result.page >= result.totalPages ? "disabled" : ""}>다음</button>
+    `;
+    document.getElementById("ifMgmtPagerPrev")?.addEventListener("click", () => {
+      ifMgmtState.page = Math.max(1, ifMgmtState.page - 1);
+      loadIfMgmt();
+    });
+    document.getElementById("ifMgmtPagerNext")?.addEventListener("click", () => {
+      ifMgmtState.page += 1;
+      loadIfMgmt();
+    });
+  } catch (err) {
+    container.innerHTML = `<p class="error">${err.message}</p>`;
+    pager.innerHTML = "";
+  }
+}
+
+let ifMgmtSearchDebounce;
+document.getElementById("ifMgmtSearchInput").addEventListener("input", (e) => {
+  clearTimeout(ifMgmtSearchDebounce);
+  ifMgmtSearchDebounce = setTimeout(() => {
+    ifMgmtState.search = e.target.value;
+    ifMgmtState.page = 1;
+    updateIfMgmtHeader();
+    loadIfMgmt();
+  }, 300);
+});
+
+async function deleteIfEntry(entry) {
+  if (!confirm(`"${entry.interfaceName}" (${entry.interfaceId})를 삭제하시겠습니까?`)) return;
+  try {
+    await api("DELETE", `/api/interfaces/${encodeURIComponent(entry.interfaceId)}`);
+    await loadIfMgmt();
+  } catch (err) {
+    alert(`삭제 실패: ${err.message}`);
+  }
+}
+
+// ---------- Interface create/edit form ----------
+let ifFormMode = "create"; // "create" | "edit"
+let ifFormOriginalId = null;
+
+function renderIfConfigFields(type, existingConfig) {
+  const fields = IFMGMT_CONFIG_FIELDS[type];
+  const container = document.getElementById("ifFieldConfig");
+  container.innerHTML = fields
+    .map((f) => {
+      const value = existingConfig && existingConfig[f.key] !== undefined ? existingConfig[f.key] : "";
+      return `<label>${f.label}${f.required ? "" : " (선택)"}
+        <input type="${f.type}" id="ifCfg_${f.key}" data-key="${f.key}" value="${escapeHtml(String(value))}" ${f.required ? "required" : ""} placeholder="${escapeHtml(f.placeholder ?? "")}" />
+      </label>`;
+    })
+    .join("");
+}
+
+function openIfForm(entry) {
+  const form = document.getElementById("ifForm");
+  const title = document.getElementById("ifFormTitle");
+  const errorEl = document.getElementById("ifFormError");
+  errorEl.hidden = true;
+  const idInput = document.getElementById("ifFieldId");
+  const nameInput = document.getElementById("ifFieldName");
+  const typeSelect = document.getElementById("ifFieldType");
+
+  if (entry) {
+    ifFormMode = "edit";
+    ifFormOriginalId = entry.interfaceId;
+    title.textContent = `인터페이스 수정: ${entry.interfaceId}`;
+    idInput.value = entry.interfaceId;
+    idInput.disabled = true;
+    nameInput.value = entry.interfaceName;
+    typeSelect.value = entry.connectorType;
+    typeSelect.disabled = true;
+    renderIfConfigFields(entry.connectorType, entry.config);
+  } else {
+    ifFormMode = "create";
+    ifFormOriginalId = null;
+    title.textContent = "새 인터페이스 등록";
+    idInput.value = "";
+    idInput.disabled = false;
+    nameInput.value = "";
+    typeSelect.value = "HTTP";
+    typeSelect.disabled = false;
+    renderIfConfigFields("HTTP", null);
+  }
+  form.hidden = false;
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeIfForm() {
+  document.getElementById("ifForm").hidden = true;
+}
+
+document.getElementById("ifMgmtCreateBtn").addEventListener("click", () => openIfForm(null));
+document.getElementById("ifFormCloseBtn").addEventListener("click", closeIfForm);
+document.getElementById("ifFieldType").addEventListener("change", (e) => {
+  if (ifFormMode === "create") renderIfConfigFields(e.target.value, null);
+});
+
+document.getElementById("ifFormEl").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById("ifFormError");
+  errorEl.hidden = true;
+
+  const interfaceId = document.getElementById("ifFieldId").value.trim();
+  const interfaceName = document.getElementById("ifFieldName").value.trim();
+  const connectorType = document.getElementById("ifFieldType").value;
+  const config = {};
+  document.querySelectorAll("#ifFieldConfig [data-key]").forEach((input) => {
+    if (input.value !== "") config[input.dataset.key] = input.value;
+  });
+
+  const submitBtn = document.getElementById("ifFormSubmitBtn");
+  submitBtn.disabled = true;
+  try {
+    if (ifFormMode === "create") {
+      await api("POST", "/api/interfaces", { interfaceId, interfaceName, connectorType, config });
+    } else {
+      await api("PUT", `/api/interfaces/${encodeURIComponent(ifFormOriginalId)}`, {
+        interfaceName,
+        connectorType,
+        config,
+      });
+    }
+    closeIfForm();
+    ifMgmtState.type = connectorType;
+    ifMgmtState.search = "";
+    document.getElementById("ifMgmtSearchInput").value = "";
+    document.querySelectorAll(".ifmgmt-type-btn").forEach((b) => b.classList.toggle("active", b.dataset.ifmgmttype === connectorType));
+    updateIfMgmtHeader();
+    await loadIfMgmt();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.hidden = false;
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
 // ---------- Stats / charts ----------
 const CONNECTOR_TYPE_LABEL = { QUEUE: "큐", HTTP: "HTTP", DB: "DB", FILE: "FILE", UNKNOWN: "미등록" };
 
@@ -394,12 +670,14 @@ function formatBucketLabel(dateStr, bucket) {
 }
 
 // ---------- Sub-tabs ----------
-document.querySelectorAll(".subtab-btn").forEach((btn) => {
+// .subtab-btn 클래스는 스타일 재사용을 위해 커넥터/인터페이스 관리의 타입 탭에도 붙어있으므로,
+// 여기서는 실제 data-subtab 속성이 있는 버튼만 골라서 리스너를 답니다.
+document.querySelectorAll(".subtab-btn[data-subtab]").forEach((btn) => {
   btn.addEventListener("click", () => activateSubtab(btn.dataset.subtab));
 });
 
 function activateSubtab(name) {
-  document.querySelectorAll(".subtab-btn").forEach((b) => b.classList.toggle("active", b.dataset.subtab === name));
+  document.querySelectorAll(".subtab-btn[data-subtab]").forEach((b) => b.classList.toggle("active", b.dataset.subtab === name));
   document.querySelectorAll(".subtab-panel").forEach((p) => p.classList.toggle("active", p.id === `substat-${name}`));
   if (name === "daily") loadDailyStats();
   if (name === "type") loadTypeStats();

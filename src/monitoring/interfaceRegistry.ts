@@ -103,3 +103,9 @@ export async function getInterface(interfaceId: string): Promise<InterfaceRegist
     | undefined;
   return row ? rowToEntry(row) : undefined;
 }
+
+// 인터페이스를 삭제합니다. 과거 트랜잭션 이력(interface_runs)은 감사 목적으로 그대로 남겨둡니다.
+export async function deleteInterface(interfaceId: string): Promise<boolean> {
+  const result = db.prepare("DELETE FROM interfaces WHERE interface_id = ?").run(interfaceId);
+  return result.changes > 0;
+}

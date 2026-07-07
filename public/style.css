@@ -120,6 +120,26 @@ body {
   font-size: 0.85rem;
 }
 
+.if-form { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.if-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  max-width: 420px;
+}
+.if-form input, .if-form select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--mono-bg);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.if-row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.if-row-actions button { padding: 4px 10px; font-size: 0.75rem; white-space: nowrap; }
+
 main {
   padding: clamp(12px, 3vw, 32px);
   width: 100%;
