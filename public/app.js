@@ -249,7 +249,6 @@ function connectorTypeFields(c) {
 }
 
 const CONNTYPE_META = {
-  "": { title: "전체 커넥터 모니터링", hint: "인터페이스 이름으로 검색하면 커넥터 타입에 상관없이 전체에서 찾습니다." },
   HTTP: { title: "HTTP 커넥터 모니터링", hint: "오늘 호출 건수/성공/실패, 서비스 IP, 평균/최소/최대 소요시간, 느린 호출 비율을 확인합니다." },
   QUEUE: { title: "QUEUE 커넥터 모니터링", hint: "큐 경로(출발 → 도착), 적체 건수, 최고 적체 시간, 처리 상태를 확인합니다." },
   DB: { title: "DB 커넥터 모니터링", hint: "폴링 주기 대비 마지막 실행 시각을 기준으로 지연 여부를 확인합니다." },
@@ -257,11 +256,26 @@ const CONNTYPE_META = {
 };
 
 const connState = {
-  type: "",
+  type: "HTTP",
   page: 1,
   pageSize: 20,
   search: "",
 };
+
+// 검색어가 있으면 현재 선택된 소메뉴(타입)와 상관없이 모든 타입을 대상으로 찾습니다.
+// 검색어가 없을 때만 소메뉴가 고른 타입으로 좁혀서 보여줍니다.
+function updateConnectorsHeader() {
+  const title = document.getElementById("connectorsTitle");
+  const hint = document.getElementById("connectorsHint");
+  if (connState.search) {
+    title.textContent = "커넥터 검색 결과 (전체 타입)";
+    hint.textContent = "검색어가 있는 동안은 선택한 소메뉴와 상관없이 모든 커넥터 타입에서 찾습니다.";
+  } else {
+    const meta = CONNTYPE_META[connState.type];
+    title.textContent = meta.title;
+    hint.textContent = meta.hint;
+  }
+}
 
 document.querySelectorAll(".conntype-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -270,16 +284,11 @@ document.querySelectorAll(".conntype-btn").forEach((btn) => {
     connState.page = 1;
     connState.search = "";
     document.getElementById("connectorsSearchInput").value = "";
-    const meta = CONNTYPE_META[connState.type];
-    document.getElementById("connectorsTitle").textContent = meta.title;
-    document.getElementById("connectorsHint").textContent = meta.hint;
+    updateConnectorsHeader();
     loadConnectors();
   });
 });
-{
-  const meta = CONNTYPE_META[connState.type];
-  document.getElementById("connectorsHint").textContent = meta.hint;
-}
+updateConnectorsHeader();
 
 async function loadConnectors() {
   const container = document.getElementById("connectorsList");
@@ -290,8 +299,11 @@ async function loadConnectors() {
       page: String(connState.page),
       pageSize: String(connState.pageSize),
     });
-    if (connState.type) params.set("type", connState.type);
-    if (connState.search) params.set("search", connState.search);
+    if (connState.search) {
+      params.set("search", connState.search);
+    } else {
+      params.set("type", connState.type);
+    }
     const result = await api("GET", `/api/connectors?${params}`);
     if (result.rows.length === 0) {
       container.innerHTML = '<p class="hint">등록된 인터페이스가 없습니다.</p>';
@@ -346,6 +358,7 @@ document.getElementById("connectorsSearchInput").addEventListener("input", (e) =
   connectorsSearchDebounce = setTimeout(() => {
     connState.search = e.target.value;
     connState.page = 1;
+    updateConnectorsHeader();
     loadConnectors();
   }, 300);
 });
