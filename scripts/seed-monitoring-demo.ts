@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { ConnectorConfig, ConnectorType } from "../src/monitoring/connectorTypes.js";
 import { upsertInterface } from "../src/monitoring/interfaceRegistry.js";
 import { recordRun } from "../src/monitoring/logStore.js";
+import { upsertResource } from "../src/monitoring/resourceRegistry.js";
+import type { ResourceConfig, ResourceType } from "../src/monitoring/resourceTypes.js";
 import type { RunRecord } from "../src/monitoring/types.js";
 
 // 모니터링 화면을 Flow 실행 없이도 바로 확인할 수 있도록 더미 트랜잭션 로그를 채워 넣습니다.
@@ -80,6 +82,34 @@ const INTERFACES: InterfaceDef[] = [
   },
 ];
 
+interface ResourceDef {
+  resourceId: string;
+  resourceName: string;
+  resourceType: ResourceType;
+  config: ResourceConfig;
+}
+
+const RESOURCES: ResourceDef[] = [
+  {
+    resourceId: "RES-DB-ERP",
+    resourceName: "ERP 운영 DB",
+    resourceType: "DB",
+    config: { host: "10.10.20.11", port: 1521, database: "ERPDB", driver: "oracle", username: "esb_reader" },
+  },
+  {
+    resourceId: "RES-DB-ORDERS",
+    resourceName: "주문 시스템 DB",
+    resourceType: "DB",
+    config: { host: "10.10.20.30", port: 3306, database: "orders", driver: "mysql", username: "esb_reader" },
+  },
+  {
+    resourceId: "RES-JMS-MALL",
+    resourceName: "쇼핑몰 큐 브로커",
+    resourceType: "JMS",
+    config: { brokerUrl: "tcp://10.10.30.5:61616", connectionFactory: "ConnectionFactory", username: "esb_mq" },
+  },
+];
+
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -129,6 +159,10 @@ async function seed() {
     });
   }
 
+  for (const resource of RESOURCES) {
+    await upsertResource(resource);
+  }
+
   for (let daysAgo = 6; daysAgo >= 0; daysAgo--) {
     for (const iface of INTERFACES) {
       const runsToday = randomInt(4, 9);
@@ -168,6 +202,7 @@ async function seed() {
   console.log(
     `인터페이스 ${INTERFACES.length}개 등록(${INTERFACES.map((i) => i.connectorType).join("/")}) + 더미 트랜잭션 ${count}건을 삽입했습니다 (최근 7일).`,
   );
+  console.log(`공통 리소스 ${RESOURCES.length}개 등록(${RESOURCES.map((r) => r.resourceType).join("/")}).`);
   for (const [name, stats] of perInterfaceCounts) {
     console.log(`  - ${name}: ${stats.runs}건 실행, 실패/부분실패 ${stats.problems}건`);
   }

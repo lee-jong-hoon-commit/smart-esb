@@ -39,6 +39,7 @@ function activateTab(tab) {
   if (tab === "connectors") loadConnectors();
   if (tab === "stats") loadDailyStats();
   if (tab === "interfaces") loadIfMgmt();
+  if (tab === "resources") loadResMgmt();
 }
 
 // ---------- Monitoring ----------
@@ -641,6 +642,269 @@ document.getElementById("ifFormEl").addEventListener("submit", async (e) => {
     document.querySelectorAll(".ifmgmt-type-btn").forEach((b) => b.classList.toggle("active", b.dataset.ifmgmttype === connectorType));
     updateIfMgmtHeader();
     await loadIfMgmt();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.hidden = false;
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+// ---------- Shared resources (DB/JMS) ----------
+const RESMGMT_TYPE_META = {
+  DB: { title: "DB 리소스 관리", hint: "DB 연결 리소스를 등록/수정/삭제합니다." },
+  JMS: { title: "JMS 리소스 관리", hint: "JMS 큐 브로커 연결 리소스를 등록/수정/삭제합니다." },
+};
+
+const RESMGMT_CONFIG_FIELDS = {
+  DB: [
+    { key: "host", label: "호스트", type: "text", required: true },
+    { key: "port", label: "포트", type: "number", required: true },
+    { key: "database", label: "데이터베이스/SID", type: "text", required: true },
+    { key: "driver", label: "드라이버", type: "text", required: true, placeholder: "oracle, mysql, postgresql 등" },
+    { key: "username", label: "사용자명", type: "text", required: true },
+  ],
+  JMS: [
+    { key: "brokerUrl", label: "브로커 URL", type: "text", required: true, placeholder: "tcp://host:61616" },
+    { key: "connectionFactory", label: "커넥션 팩토리", type: "text", required: true },
+    { key: "username", label: "사용자명", type: "text", required: true },
+  ],
+};
+
+function resConfigSummary(entry) {
+  const c = entry.config;
+  if (entry.resourceType === "DB") return `${escapeHtml(c.driver)} / ${escapeHtml(c.host)}:${c.port}/${escapeHtml(c.database)} / ${escapeHtml(c.username)}`;
+  return `${escapeHtml(c.brokerUrl)} / ${escapeHtml(c.connectionFactory)} / ${escapeHtml(c.username)}`;
+}
+
+const resMgmtState = {
+  type: "DB",
+  page: 1,
+  pageSize: 20,
+  search: "",
+};
+
+function updateResMgmtHeader() {
+  const title = document.getElementById("resMgmtTitle");
+  const hint = document.getElementById("resMgmtHint");
+  if (resMgmtState.search) {
+    title.textContent = "리소스 검색 결과 (전체 타입)";
+    hint.textContent = "검색어가 있는 동안은 선택한 소메뉴와 상관없이 모든 리소스 타입에서 찾습니다.";
+  } else {
+    const meta = RESMGMT_TYPE_META[resMgmtState.type];
+    title.textContent = meta.title;
+    hint.textContent = meta.hint;
+  }
+}
+
+function updateResMgmtHighlight(resultTypes) {
+  document.querySelectorAll(".resmgmt-type-btn").forEach((b) => {
+    const isActive = resMgmtState.search ? resultTypes.has(b.dataset.resmgmttype) : b.dataset.resmgmttype === resMgmtState.type;
+    b.classList.toggle("active", isActive);
+  });
+}
+
+document.querySelectorAll(".resmgmt-type-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    resMgmtState.type = btn.dataset.resmgmttype;
+    resMgmtState.page = 1;
+    resMgmtState.search = "";
+    document.getElementById("resMgmtSearchInput").value = "";
+    updateResMgmtHeader();
+    updateResMgmtHighlight(new Set());
+    loadResMgmt();
+  });
+});
+updateResMgmtHeader();
+
+async function loadResMgmt() {
+  const container = document.getElementById("resMgmtTable");
+  const pager = document.getElementById("resMgmtPager");
+  container.innerHTML = '<p class="hint">불러오는 중…</p>';
+  try {
+    const params = new URLSearchParams({
+      page: String(resMgmtState.page),
+      pageSize: String(resMgmtState.pageSize),
+    });
+    if (resMgmtState.search) {
+      params.set("search", resMgmtState.search);
+    } else {
+      params.set("type", resMgmtState.type);
+    }
+    const result = await api("GET", `/api/resources?${params}`);
+    updateResMgmtHighlight(new Set(result.rows.map((r) => r.resourceType)));
+    if (result.rows.length === 0) {
+      container.innerHTML = '<p class="hint">등록된 리소스가 없습니다.</p>';
+      pager.innerHTML = "";
+      return;
+    }
+    const rows = result.rows
+      .map(
+        (entry) => `
+      <tr data-resource-id="${escapeHtml(entry.resourceId)}">
+        <td class="mono cell-ellipsis" title="${escapeHtml(entry.resourceId)}">${escapeHtml(entry.resourceId)}</td>
+        <td class="cell-ellipsis" title="${escapeHtml(entry.resourceName)}">${escapeHtml(entry.resourceName)}</td>
+        <td><span class="tag connector-type-badge">${escapeHtml(entry.resourceType)}</span></td>
+        <td class="cell-ellipsis" title="${resConfigSummary(entry)}">${resConfigSummary(entry)}</td>
+        <td class="if-row-actions">
+          <button class="secondary res-edit-btn">수정</button>
+          <button class="secondary res-delete-btn">삭제</button>
+        </td>
+      </tr>`,
+      )
+      .join("");
+    container.innerHTML = `
+      <div class="table-scroll">
+        <table class="mon-table">
+          <colgroup>
+            <col style="width: 20%" /><col style="width: 22%" /><col style="width: 10%" /><col style="width: 33%" /><col style="width: 15%" />
+          </colgroup>
+          <thead>
+            <tr><th>리소스ID</th><th>이름</th><th>타입</th><th>설정 요약</th><th>작업</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+    container.querySelectorAll("tbody tr").forEach((tr) => {
+      const entry = result.rows.find((r) => r.resourceId === tr.dataset.resourceId);
+      tr.querySelector(".res-edit-btn").addEventListener("click", () => openResForm(entry));
+      tr.querySelector(".res-delete-btn").addEventListener("click", () => deleteResEntry(entry));
+    });
+
+    pager.innerHTML = `
+      <button class="secondary" id="resMgmtPagerPrev" ${result.page <= 1 ? "disabled" : ""}>이전</button>
+      <span class="hint">페이지 ${result.page} / ${result.totalPages} (총 ${result.total}개 리소스)</span>
+      <button class="secondary" id="resMgmtPagerNext" ${result.page >= result.totalPages ? "disabled" : ""}>다음</button>
+    `;
+    document.getElementById("resMgmtPagerPrev")?.addEventListener("click", () => {
+      resMgmtState.page = Math.max(1, resMgmtState.page - 1);
+      loadResMgmt();
+    });
+    document.getElementById("resMgmtPagerNext")?.addEventListener("click", () => {
+      resMgmtState.page += 1;
+      loadResMgmt();
+    });
+  } catch (err) {
+    container.innerHTML = `<p class="error">${err.message}</p>`;
+    pager.innerHTML = "";
+  }
+}
+
+let resMgmtSearchDebounce;
+document.getElementById("resMgmtSearchInput").addEventListener("input", (e) => {
+  clearTimeout(resMgmtSearchDebounce);
+  resMgmtSearchDebounce = setTimeout(() => {
+    resMgmtState.search = e.target.value;
+    resMgmtState.page = 1;
+    updateResMgmtHeader();
+    loadResMgmt();
+  }, 300);
+});
+
+async function deleteResEntry(entry) {
+  if (!confirm(`"${entry.resourceName}" (${entry.resourceId})를 삭제하시겠습니까?`)) return;
+  try {
+    await api("DELETE", `/api/resources/${encodeURIComponent(entry.resourceId)}`);
+    await loadResMgmt();
+  } catch (err) {
+    alert(`삭제 실패: ${err.message}`);
+  }
+}
+
+// ---------- Resource create/edit form ----------
+let resFormMode = "create"; // "create" | "edit"
+let resFormOriginalId = null;
+
+function renderResConfigFields(type, existingConfig) {
+  const fields = RESMGMT_CONFIG_FIELDS[type];
+  const container = document.getElementById("resFieldConfig");
+  container.innerHTML = fields
+    .map((f) => {
+      const value = existingConfig && existingConfig[f.key] !== undefined ? existingConfig[f.key] : "";
+      return `<label>${f.label}
+        <input type="${f.type}" id="resCfg_${f.key}" data-key="${f.key}" value="${escapeHtml(String(value))}" ${f.required ? "required" : ""} placeholder="${escapeHtml(f.placeholder ?? "")}" />
+      </label>`;
+    })
+    .join("");
+}
+
+function openResForm(entry) {
+  const form = document.getElementById("resForm");
+  const title = document.getElementById("resFormTitle");
+  const errorEl = document.getElementById("resFormError");
+  errorEl.hidden = true;
+  const idInput = document.getElementById("resFieldId");
+  const nameInput = document.getElementById("resFieldName");
+  const typeSelect = document.getElementById("resFieldType");
+
+  if (entry) {
+    resFormMode = "edit";
+    resFormOriginalId = entry.resourceId;
+    title.textContent = `리소스 수정: ${entry.resourceId}`;
+    idInput.value = entry.resourceId;
+    idInput.disabled = true;
+    nameInput.value = entry.resourceName;
+    typeSelect.value = entry.resourceType;
+    typeSelect.disabled = true;
+    renderResConfigFields(entry.resourceType, entry.config);
+  } else {
+    resFormMode = "create";
+    resFormOriginalId = null;
+    title.textContent = "새 리소스 등록";
+    idInput.value = "";
+    idInput.disabled = false;
+    nameInput.value = "";
+    typeSelect.value = "DB";
+    typeSelect.disabled = false;
+    renderResConfigFields("DB", null);
+  }
+  form.hidden = false;
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeResForm() {
+  document.getElementById("resForm").hidden = true;
+}
+
+document.getElementById("resMgmtCreateBtn").addEventListener("click", () => openResForm(null));
+document.getElementById("resFormCloseBtn").addEventListener("click", closeResForm);
+document.getElementById("resFieldType").addEventListener("change", (e) => {
+  if (resFormMode === "create") renderResConfigFields(e.target.value, null);
+});
+
+document.getElementById("resFormEl").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById("resFormError");
+  errorEl.hidden = true;
+
+  const resourceId = document.getElementById("resFieldId").value.trim();
+  const resourceName = document.getElementById("resFieldName").value.trim();
+  const resourceType = document.getElementById("resFieldType").value;
+  const config = {};
+  document.querySelectorAll("#resFieldConfig [data-key]").forEach((input) => {
+    if (input.value !== "") config[input.dataset.key] = input.value;
+  });
+
+  const submitBtn = document.getElementById("resFormSubmitBtn");
+  submitBtn.disabled = true;
+  try {
+    if (resFormMode === "create") {
+      await api("POST", "/api/resources", { resourceId, resourceName, resourceType, config });
+    } else {
+      await api("PUT", `/api/resources/${encodeURIComponent(resFormOriginalId)}`, {
+        resourceName,
+        resourceType,
+        config,
+      });
+    }
+    closeResForm();
+    resMgmtState.type = resourceType;
+    resMgmtState.search = "";
+    document.getElementById("resMgmtSearchInput").value = "";
+    document.querySelectorAll(".resmgmt-type-btn").forEach((b) => b.classList.toggle("active", b.dataset.resmgmttype === resourceType));
+    updateResMgmtHeader();
+    await loadResMgmt();
   } catch (err) {
     errorEl.textContent = err.message;
     errorEl.hidden = false;

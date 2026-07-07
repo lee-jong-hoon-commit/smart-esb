@@ -33,6 +33,14 @@ db.exec(`
     config_json TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS shared_resources (
+    resource_id TEXT PRIMARY KEY,
+    resource_name TEXT NOT NULL,
+    resource_type TEXT NOT NULL,
+    config_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
 `);
 
 // CREATE TABLE IF NOT EXISTS는 이미 존재하는 테이블에 새 컬럼을 추가해주지 않으므로,

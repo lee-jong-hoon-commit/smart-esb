@@ -57,7 +57,7 @@ export interface InterfaceRegistryPage {
 }
 
 // 커넥터 타입별로 인터페이스가 수천~수만 개로 늘어날 수 있으므로, 전체를 내려주지 않고
-// SQL 단에서 타입 필터(선택) + 이름 검색(LIKE) + 페이지네이션(LIMIT/OFFSET)을 적용합니다.
+// SQL 단에서 타입 필터(선택) + ID/이름 검색(LIKE) + 페이지네이션(LIMIT/OFFSET)을 적용합니다.
 // connectorType을 생략하면 모든 타입을 대상으로 검색합니다 (커넥터 모니터링의 "전체" 탭용).
 export async function listInterfacesPage(
   connectorType: ConnectorType | undefined,
@@ -76,8 +76,8 @@ export async function listInterfacesPage(
     params.push(connectorType);
   }
   if (searchFilter) {
-    conditions.push("interface_name LIKE ?");
-    params.push(searchFilter);
+    conditions.push("(interface_name LIKE ? OR interface_id LIKE ?)");
+    params.push(searchFilter, searchFilter);
   }
   const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 

@@ -16,6 +16,7 @@
     <button class="tab-btn" data-tab="connectors">커넥터 모니터링</button>
     <button class="tab-btn" data-tab="stats">통계</button>
     <button class="tab-btn" data-tab="interfaces">인터페이스 관리</button>
+    <button class="tab-btn" data-tab="resources">공통 리소스</button>
     <button class="tab-btn" data-tab="chat">챗봇</button>
   </nav>
 
@@ -168,6 +169,56 @@
           <div class="row-between">
             <span></span>
             <button type="submit" id="ifFormSubmitBtn">저장</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section id="tab-resources" class="tab-panel">
+      <div class="card">
+        <h2>공통 리소스 통합 검색</h2>
+        <p class="hint">아래 소메뉴에서 어떤 타입을 보고 있든 상관없이, 검색어를 입력하면 DB/JMS 전체에서 리소스 ID/이름을 찾습니다.</p>
+        <input type="text" id="resMgmtSearchInput" placeholder="리소스 ID 또는 이름으로 검색 (모든 타입 대상)" class="search-input" />
+      </div>
+
+      <nav class="subtabs">
+        <button class="subtab-btn resmgmt-type-btn active" data-resmgmttype="DB">DB</button>
+        <button class="subtab-btn resmgmt-type-btn" data-resmgmttype="JMS">JMS</button>
+      </nav>
+      <div class="card">
+        <div class="row-between">
+          <h2 id="resMgmtTitle">DB 리소스 관리</h2>
+          <button id="resMgmtCreateBtn">+ 새 리소스 등록</button>
+        </div>
+        <p class="hint" id="resMgmtHint"></p>
+        <div id="resMgmtTable"></div>
+        <div id="resMgmtPager" class="pager"></div>
+      </div>
+
+      <div class="card" id="resForm" hidden>
+        <div class="row-between">
+          <h2 id="resFormTitle">새 리소스 등록</h2>
+          <button class="secondary" id="resFormCloseBtn">닫기</button>
+        </div>
+        <form id="resFormEl" class="if-form">
+          <label>리소스 ID
+            <input type="text" id="resFieldId" required />
+          </label>
+          <label>리소스 이름
+            <input type="text" id="resFieldName" required />
+          </label>
+          <label>리소스 타입
+            <select id="resFieldType">
+              <option value="DB">DB</option>
+              <option value="JMS">JMS</option>
+            </select>
+          </label>
+          <div id="resFieldConfig"></div>
+          <p class="hint">비밀번호 등 시크릿은 이 화면에서 다루지 않습니다. 별도 시크릿 저장소를 참조한다고 가정합니다.</p>
+          <p class="error" id="resFormError" hidden></p>
+          <div class="row-between">
+            <span></span>
+            <button type="submit" id="resFormSubmitBtn">저장</button>
           </div>
         </form>
       </div>
